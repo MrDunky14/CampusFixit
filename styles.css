@@ -574,6 +574,71 @@ body {
 }
 @keyframes spin { to { transform: rotate(360deg); } }
 
+/* ---------- Voting System ---------- */
+.card-vote-row {
+  display: flex; align-items: center; gap: 10px;
+  padding: 4px 0;
+}
+
+.btn-upvote {
+  display: flex; align-items: center; gap: 4px;
+  padding: 4px 12px; font-size: .82rem; font-weight: 700;
+  border: 1.5px solid var(--border); border-radius: 6px;
+  background: var(--bg-input); color: var(--text-secondary);
+  cursor: pointer; transition: all var(--transition);
+}
+.btn-upvote:hover {
+  border-color: var(--accent); color: var(--accent);
+  background: var(--accent-light); transform: translateY(-1px);
+}
+.btn-upvote.voted {
+  border-color: var(--accent); color: var(--accent);
+  background: var(--accent-light);
+}
+.btn-upvote.voted .upvote-arrow { color: var(--accent); }
+
+.btn-upvote.vote-warm {
+  border-color: var(--priority-medium); color: var(--priority-medium);
+}
+.btn-upvote.vote-warm.voted {
+  background: var(--status-pending-bg);
+}
+
+.btn-upvote.vote-hot {
+  border-color: var(--priority-high); color: var(--priority-high);
+}
+.btn-upvote.vote-hot.voted {
+  background: var(--status-reopened-bg);
+}
+
+.upvote-arrow {
+  font-size: .9rem; line-height: 1;
+  transition: transform .15s ease;
+}
+.btn-upvote:hover .upvote-arrow { transform: translateY(-2px); }
+
+.upvote-count { font-size: .82rem; font-weight: 800; min-width: 12px; text-align: center; }
+
+.vote-label {
+  font-size: .72rem; color: var(--text-muted); font-weight: 600;
+}
+.vote-label.vote-warm { color: var(--priority-medium); }
+.vote-label.vote-hot  { color: var(--priority-high); font-weight: 700; }
+
+/* Vote count in staff table */
+.vote-count-badge {
+  display: inline-flex; align-items: center; gap: 3px;
+  padding: 2px 8px; font-size: .78rem; font-weight: 700;
+  border-radius: 4px; background: var(--bg-input); color: var(--text-secondary);
+}
+.vote-count-badge.vote-warm {
+  background: var(--status-pending-bg); color: var(--priority-medium);
+}
+.vote-count-badge.vote-hot {
+  background: var(--status-reopened-bg); color: var(--priority-high);
+}
+.vote-cell { white-space: nowrap; }
+
 /* ---------- Responsive ---------- */
 @media (max-width: 900px) {
   .main-layout { flex-direction: column; }
