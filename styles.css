@@ -578,6 +578,27 @@ body.dark .role-btn.active { background: var(--text-primary); color: var(--bg-bo
 .btn-verify-cancel { background: var(--bg-input); color: var(--text-primary); border: 1px solid var(--border-strong) !important; }
 .btn-verify-cancel:hover { background: var(--border); }
 
+/* ---------- Custom Dialog ---------- */
+.dialog-modal { width: 400px; text-align: center; }
+.dialog-icon { font-size: 3rem; margin-bottom: 8px; line-height: 1; }
+.dialog-title { text-align: center; }
+.dialog-message {
+  font-size: .9rem; color: var(--text-secondary); font-weight: 500;
+  margin-bottom: 20px; line-height: 1.5;
+}
+.dialog-input-wrap { margin-bottom: 20px; }
+.dialog-input {
+  width: 100%; padding: 12px 16px; font-size: 1rem; font-weight: 600;
+  border: 2px solid var(--border); border-radius: var(--radius-sm);
+  background: var(--bg-input); color: var(--text-primary);
+  outline: none; font-family: inherit; text-align: center;
+  transition: var(--transition); letter-spacing: .05em;
+}
+.dialog-input:focus { border-color: var(--accent-primary); box-shadow: 0 0 0 4px rgba(79,70,229,.12); }
+.dialog-input.pin-input { font-size: 1.4rem; letter-spacing: .3em; }
+.dialog-actions { justify-content: center; }
+.dialog-actions button { min-width: 120px; flex: unset; }
+
 /* Star Rating */
 .modal-rating { margin-top: 12px; }
 .stars { display: flex; gap: 8px; margin-top: 8px; }

@@ -72,6 +72,61 @@
   const STAFF_PIN = '1234';
   let staffAuthenticated = false;
 
+  /* ---------- Custom Dialog System ---------- */
+  function customDialog({ icon, title, message, placeholder, inputType, inputClass, confirmText, confirmClass, showInput }) {
+    return new Promise(resolve => {
+      const overlay = $('#custom-dialog');
+      const dlgIcon = $('#dialog-icon');
+      const dlgTitle = $('#dialog-title');
+      const dlgMsg = $('#dialog-message');
+      const dlgInputWrap = $('#dialog-input-wrap');
+      const dlgInput = $('#dialog-input');
+      const dlgConfirm = $('#dialog-confirm');
+      const dlgCancel = $('#dialog-cancel');
+
+      dlgIcon.textContent = icon || '💬';
+      dlgTitle.textContent = title || 'Confirm';
+      dlgMsg.textContent = message || '';
+      dlgMsg.style.display = message ? '' : 'none';
+
+      if (showInput) {
+        dlgInputWrap.classList.remove('hidden');
+        dlgInput.value = '';
+        dlgInput.type = inputType || 'text';
+        dlgInput.placeholder = placeholder || '';
+        dlgInput.className = 'dialog-input' + (inputClass ? ' ' + inputClass : '');
+        setTimeout(() => dlgInput.focus(), 80);
+      } else {
+        dlgInputWrap.classList.add('hidden');
+      }
+
+      dlgConfirm.textContent = confirmText || 'Confirm';
+      dlgConfirm.className = confirmClass || 'btn-verify-accept';
+
+      overlay.classList.remove('hidden');
+
+      function cleanup() {
+        overlay.classList.add('hidden');
+        dlgConfirm.removeEventListener('click', onConfirm);
+        dlgCancel.removeEventListener('click', onCancel);
+        overlay.removeEventListener('click', onOverlay);
+        document.removeEventListener('keydown', onKey);
+      }
+      function onConfirm() { cleanup(); resolve(showInput ? dlgInput.value : true); }
+      function onCancel()  { cleanup(); resolve(showInput ? null : false); }
+      function onOverlay(e) { if (e.target === overlay) onCancel(); }
+      function onKey(e) {
+        if (e.key === 'Escape') onCancel();
+        if (e.key === 'Enter' && !e.shiftKey) onConfirm();
+      }
+
+      dlgConfirm.addEventListener('click', onConfirm);
+      dlgCancel.addEventListener('click', onCancel);
+      overlay.addEventListener('click', onOverlay);
+      document.addEventListener('keydown', onKey);
+    });
+  }
+
   /* ---------- DOM Refs ---------- */
   const el = {
     toastContainer: $('#toast-container'),
@@ -173,7 +228,17 @@
 
     // Reset
     el.resetBtn.addEventListener('click', () => {
-      if (confirm('Reset all data to demo tickets?')) { resetToSeed(); render(); toast('Demo data restored'); }
+      customDialog({
+        icon: '🔄',
+        title: 'Reset Demo Data',
+        message: 'This will erase all current tickets and restore the 8 demo tickets. Continue?',
+        showInput: false,
+        confirmText: '🗑️ Reset Everything',
+        confirmClass: 'btn-verify-reject',
+      }).then(ok => {
+        if (!ok) return;
+        resetToSeed(); render(); toast('Demo data restored');
+      });
     });
 
     // Form submit
@@ -271,9 +336,26 @@
   /* ---------- Role Switch ---------- */
   function switchRole(role) {
     if (role === 'staff' && !staffAuthenticated) {
-      const pin = prompt('🔒 Enter Staff PIN to access the panel:');
-      if (pin !== STAFF_PIN) { toast('Invalid PIN. Access denied.'); return; }
-      staffAuthenticated = true;
+      customDialog({
+        icon: '🔒',
+        title: 'Staff Authentication',
+        message: 'Enter the staff PIN to access the management panel.',
+        showInput: true,
+        inputType: 'password',
+        inputClass: 'pin-input',
+        placeholder: '• • • •',
+        confirmText: '🔓 Unlock',
+      }).then(pin => {
+        if (pin === null) return;
+        if (pin !== STAFF_PIN) { toast('Invalid PIN. Access denied.'); return; }
+        staffAuthenticated = true;
+        currentRole = role;
+        el.roleBtns.forEach(b => b.classList.toggle('active', b.dataset.role === role));
+        el.studentView.classList.toggle('hidden', role !== 'student');
+        el.staffView.classList.toggle('hidden', role !== 'staff');
+        render();
+      });
+      return;
     }
     currentRole = role;
     el.roleBtns.forEach(b => b.classList.toggle('active', b.dataset.role === role));
@@ -436,12 +518,26 @@
     if (!validTransitions[t.status]?.includes(newStatus)) { toast(`Can't move from ${t.status} to ${newStatus}`); return; }
 
     if (newStatus === 'Assigned') {
-      const assignee = prompt('Assign to (name/team):');
-      if (!assignee || !assignee.trim()) return;
-      t.assignedTo = assignee.trim();
+      customDialog({
+        icon: '👷',
+        title: 'Assign Ticket #' + id,
+        message: 'Who should handle this issue?',
+        showInput: true,
+        placeholder: 'e.g. Maintenance Team A',
+        confirmText: '✅ Assign',
+      }).then(assignee => {
+        if (!assignee || !assignee.trim()) return;
+        t.assignedTo = assignee.trim();
+        t.status = newStatus;
+        t.log.push({ time: Date.now(), actor: staffName, text: `Status → ${newStatus} to ${t.assignedTo}` });
+        save();
+        toast(`Ticket #${id} → ${newStatus}`);
+        render();
+      });
+      return;
     }
     t.status = newStatus;
-    t.log.push({ time: Date.now(), actor: staffName, text: `Status → ${newStatus}${t.assignedTo && newStatus === 'Assigned' ? ` to ${t.assignedTo}` : ''}` });
+    t.log.push({ time: Date.now(), actor: staffName, text: `Status → ${newStatus}` });
     save();
     toast(`Ticket #${id} → ${newStatus}`);
     render();
@@ -451,18 +547,55 @@
   function handleDelete(id) {
     const t = tickets.find(t => t.id === id);
     if (!t) return;
-    // Only the original reporter can delete (by name match) or staff
+
     if (currentRole === 'student') {
-      const enteredName = prompt('Enter your name to confirm deletion:');
-      if (!enteredName || enteredName.trim().toLowerCase() !== t.reporter.toLowerCase()) {
-        toast('Only the original reporter can delete this ticket'); return;
-      }
+      // Step 1: verify ownership by name
+      customDialog({
+        icon: '🗑️',
+        title: 'Delete Ticket #' + id,
+        message: 'Enter your name to confirm you are the original reporter.',
+        showInput: true,
+        placeholder: 'Your name',
+        confirmText: '🗑️ Delete',
+        confirmClass: 'btn-verify-reject',
+      }).then(enteredName => {
+        if (!enteredName || enteredName.trim().toLowerCase() !== t.reporter.toLowerCase()) {
+          if (enteredName !== null) toast('Only the original reporter can delete this ticket');
+          return;
+        }
+        // Step 2: final confirmation
+        customDialog({
+          icon: '⚠️',
+          title: 'Are you sure?',
+          message: `Ticket #${id} will be permanently deleted.`,
+          showInput: false,
+          confirmText: 'Yes, Delete',
+          confirmClass: 'btn-verify-reject',
+        }).then(ok => {
+          if (!ok) return;
+          tickets = tickets.filter(t => t.id !== id);
+          save();
+          toast(`Ticket #${id} deleted`);
+          render();
+        });
+      });
+    } else {
+      // Staff delete — just confirm
+      customDialog({
+        icon: '⚠️',
+        title: 'Delete Ticket #' + id,
+        message: 'This action is permanent. Continue?',
+        showInput: false,
+        confirmText: '🗑️ Delete',
+        confirmClass: 'btn-verify-reject',
+      }).then(ok => {
+        if (!ok) return;
+        tickets = tickets.filter(t => t.id !== id);
+        save();
+        toast(`Ticket #${id} deleted`);
+        render();
+      });
     }
-    if (!confirm(`Delete ticket #${id}?`)) return;
-    tickets = tickets.filter(t => t.id !== id);
-    save();
-    toast(`Ticket #${id} deleted`);
-    render();
   }
 
   /* ---------- Voting ---------- */

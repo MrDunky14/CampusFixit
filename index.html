@@ -13,6 +13,22 @@
   <!-- Toast container -->
   <div id="toast-container"></div>
 
+  <!-- ===== Custom Dialog (replaces prompt/confirm) ===== -->
+  <div id="custom-dialog" class="modal-overlay hidden">
+    <div class="modal dialog-modal">
+      <div class="dialog-icon" id="dialog-icon">🔒</div>
+      <h3 class="modal-title dialog-title" id="dialog-title">Title</h3>
+      <p class="dialog-message" id="dialog-message"></p>
+      <div id="dialog-input-wrap" class="dialog-input-wrap">
+        <input type="text" id="dialog-input" class="dialog-input" placeholder="" autocomplete="off" />
+      </div>
+      <div class="modal-actions dialog-actions">
+        <button id="dialog-confirm" class="btn-verify-accept">Confirm</button>
+        <button id="dialog-cancel" class="btn-verify-cancel">Cancel</button>
+      </div>
+    </div>
+  </div>
+
   <!-- ===== Image Lightbox Modal ===== -->
   <div id="lightbox-modal" class="modal-overlay hidden">
     <div class="modal lightbox-modal-content">
