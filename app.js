@@ -45,14 +45,14 @@
 
   /* ---------- Seed Data ---------- */
   const SEED_DATA = [
-    { id: 'TK8X2A', category: '💻 IT/Projector', location: 'Lecture Hall 3, Block A', priority: 'High', description: 'Projector shows a large blue horizontal line across the screen. Tried restarting — still there. Faculty can\'t show slides properly.', reporter: 'Arjun Mehta', contact: 'arjun@campus.edu', isAnonymous: false, photo: null, status: 'Pending', assignedTo: null, eta: null, votes: 14, notes: [], log: [{ time: Date.now() - 3600000 * 24, actor: 'System', text: 'Ticket created' }], verifiedRating: null, verifiedComment: null, createdAt: Date.now() - 3600000 * 24 },
-    { id: 'TK3PY7', category: '❄️ AC/Ventilation', location: 'Lab 4, Block B', priority: 'Medium', description: 'AC not cooling at all — temperature goes above 35°C in afternoon. Fans alone don\'t help. Students complain daily.', reporter: 'Priya Sharma', contact: '9876543210', isAnonymous: false, photo: null, status: 'Assigned', assignedTo: 'Maintenance Team A', eta: null, votes: 8, notes: [{ actor: 'Admin Rao', text: 'Assigned to HVAC technician. Will inspect tomorrow morning.', time: Date.now() - 3600000 * 18 }], log: [{ time: Date.now() - 3600000 * 36, actor: 'System', text: 'Ticket created' }, { time: Date.now() - 3600000 * 18, actor: 'Admin Rao', text: 'Status → Assigned to Maintenance Team A' }], verifiedRating: null, verifiedComment: null, createdAt: Date.now() - 3600000 * 36 },
-    { id: 'TK5NQ9', category: '🪑 Furniture', location: 'Room 201, Block C', priority: 'Low', description: 'Three chairs have broken armrests. One has a wobbly leg. Taped up for now but needs proper repair.', reporter: 'Rahul Dev', contact: '', isAnonymous: true, photo: null, status: 'In Progress', assignedTo: 'Carpenter - Mr. Kumar', eta: new Date(Date.now() + 86400000 * 3).toISOString().split('T')[0], votes: 3, notes: [{ actor: 'Admin Rao', text: 'Carpenter scheduled for Thursday.', time: Date.now() - 3600000 * 12 }], log: [{ time: Date.now() - 3600000 * 48, actor: 'System', text: 'Ticket created' }, { time: Date.now() - 3600000 * 24, actor: 'Admin Rao', text: 'Status → Assigned' }, { time: Date.now() - 3600000 * 12, actor: 'Admin Rao', text: 'Status → In Progress' }], verifiedRating: null, verifiedComment: null, createdAt: Date.now() - 3600000 * 48 },
-    { id: 'TK9RW4', category: '💡 Lighting', location: 'Corridor, 2nd Floor, Block A', priority: 'Medium', description: 'Four tube-lights completely dead in the corridor. Very dark after 5pm — potential safety hazard.', reporter: 'Sneha Iyer', contact: 'sneha.i@campus.edu', isAnonymous: false, photo: null, status: 'Fixed', assignedTo: 'Electrician - Mr. Patel', eta: null, votes: 11, notes: [{ actor: 'Admin Rao', text: 'Replaced all 4 tubes with new LED panels.', time: Date.now() - 3600000 * 6 }], log: [{ time: Date.now() - 3600000 * 72, actor: 'System', text: 'Ticket created' }, { time: Date.now() - 3600000 * 48, actor: 'Admin Rao', text: 'Status → Assigned' }, { time: Date.now() - 3600000 * 24, actor: 'Admin Rao', text: 'Status → In Progress' }, { time: Date.now() - 3600000 * 6, actor: 'Admin Rao', text: 'Status → Fixed' }], verifiedRating: null, verifiedComment: null, createdAt: Date.now() - 3600000 * 72 },
-    { id: 'TKJC6M', category: '🚿 Plumbing', location: 'Washroom, Ground Floor, Block D', priority: 'High', description: 'Water leaking from ceiling pipe in second stall. Puddle forming on the floor — slippery and unhygienic. Bucket placed temporarily.', reporter: 'Karthik R.', contact: '9998887776', isAnonymous: false, photo: null, status: 'Verified', assignedTo: 'Plumber - Mr. Singh', eta: null, votes: 19, notes: [{ actor: 'Admin Rao', text: 'Pipe joint replaced and sealed. Tested — no more leaks.', time: Date.now() - 3600000 * 4 }], log: [{ time: Date.now() - 3600000 * 96, actor: 'System', text: 'Ticket created' }, { time: Date.now() - 3600000 * 72, actor: 'Admin Rao', text: 'Status → Assigned' }, { time: Date.now() - 3600000 * 48, actor: 'Admin Rao', text: 'Status → In Progress' }, { time: Date.now() - 3600000 * 24, actor: 'Admin Rao', text: 'Status → Fixed' }, { time: Date.now() - 3600000 * 4, actor: 'Karthik R.', text: 'Verified ★★★★★ — Fixed perfectly' }], verifiedRating: 5, verifiedComment: 'Fixed perfectly', createdAt: Date.now() - 3600000 * 96 },
-    { id: 'TKN7ZE', category: '📶 WiFi/Network', location: 'Library, 1st Floor', priority: 'High', description: 'WiFi keeps disconnecting every 5 minutes on the 1st floor only. Other floors are fine. Students can\'t do online research.', reporter: 'Divya Nair', contact: 'divya.nair@campus.edu', isAnonymous: false, photo: null, status: 'In Progress', assignedTo: 'IT Dept - Sanjay', eta: new Date(Date.now() + 86400000).toISOString().split('T')[0], votes: 22, notes: [{ actor: 'IT Sanjay', text: 'Access point firmware outdated. Updating firmware and repositioning AP.', time: Date.now() - 3600000 * 8 }], log: [{ time: Date.now() - 3600000 * 30, actor: 'System', text: 'Ticket created' }, { time: Date.now() - 3600000 * 20, actor: 'IT Admin', text: 'Status → Assigned' }, { time: Date.now() - 3600000 * 8, actor: 'IT Sanjay', text: 'Status → In Progress' }], verifiedRating: null, verifiedComment: null, createdAt: Date.now() - 3600000 * 30 },
-    { id: 'TK4AF8', category: '🔌 Electrical', location: 'Seminar Hall, Block E', priority: 'Medium', description: '3 out of 6 power sockets near the podium are not working. Speakers can\'t charge laptops during events.', reporter: 'Amit Verma', contact: '', isAnonymous: true, photo: null, status: 'Pending', assignedTo: null, eta: null, votes: 5, notes: [], log: [{ time: Date.now() - 3600000 * 10, actor: 'System', text: 'Ticket created' }], verifiedRating: null, verifiedComment: null, createdAt: Date.now() - 3600000 * 10 },
-    { id: 'TKMP2Q', category: '🧹 Cleaning', location: 'Canteen Seating Area', priority: 'Low', description: 'Tables are sticky and not wiped after lunch hours. Dustbins overflowing by 2pm daily. Need more frequent cleaning rounds.', reporter: 'Neha Gupta', contact: 'neha.g@campus.edu', isAnonymous: false, photo: null, status: 'Assigned', assignedTo: 'Housekeeping Lead', eta: null, votes: 7, notes: [{ actor: 'Admin Rao', text: 'Informed housekeeping supervisor. Extra round added at 1:30pm.', time: Date.now() - 3600000 * 5 }], log: [{ time: Date.now() - 3600000 * 20, actor: 'System', text: 'Ticket created' }, { time: Date.now() - 3600000 * 5, actor: 'Admin Rao', text: 'Status → Assigned' }], verifiedRating: null, verifiedComment: null, createdAt: Date.now() - 3600000 * 20 }
+    { id: 'TK8X2A', category: '💻 IT/Projector', location: 'Lecture Hall 3, Block A', priority: 'High', description: 'Projector shows a large blue horizontal line across the screen. Tried restarting — still there. Faculty can\'t show slides properly.', reporter: 'Arjun Mehta', contact: 'arjun@campus.edu', photo: null, status: 'Pending', assignedTo: null, eta: null, votes: 14, notes: [], log: [{ time: Date.now() - 3600000 * 24, actor: 'System', text: 'Ticket created' }], verifiedRating: null, verifiedComment: null, createdAt: Date.now() - 3600000 * 24 },
+    { id: 'TK3PY7', category: '❄️ AC/Ventilation', location: 'Lab 4, Block B', priority: 'Medium', description: 'AC not cooling at all — temperature goes above 35°C in afternoon. Fans alone don\'t help. Students complain daily.', reporter: 'Priya Sharma', contact: '9876543210', photo: null, status: 'Assigned', assignedTo: 'Maintenance Team A', eta: null, votes: 8, notes: [{ actor: 'Admin Rao', text: 'Assigned to HVAC technician. Will inspect tomorrow morning.', time: Date.now() - 3600000 * 18 }], log: [{ time: Date.now() - 3600000 * 36, actor: 'System', text: 'Ticket created' }, { time: Date.now() - 3600000 * 18, actor: 'Admin Rao', text: 'Status → Assigned to Maintenance Team A' }], verifiedRating: null, verifiedComment: null, createdAt: Date.now() - 3600000 * 36 },
+    { id: 'TK5NQ9', category: '🪑 Furniture', location: 'Room 201, Block C', priority: 'Low', description: 'Three chairs have broken armrests. One has a wobbly leg. Taped up for now but needs proper repair.', reporter: 'Rahul Dev', contact: '', photo: null, status: 'In Progress', assignedTo: 'Carpenter - Mr. Kumar', eta: new Date(Date.now() + 86400000 * 3).toISOString().split('T')[0], votes: 3, notes: [{ actor: 'Admin Rao', text: 'Carpenter scheduled for Thursday.', time: Date.now() - 3600000 * 12 }], log: [{ time: Date.now() - 3600000 * 48, actor: 'System', text: 'Ticket created' }, { time: Date.now() - 3600000 * 24, actor: 'Admin Rao', text: 'Status → Assigned' }, { time: Date.now() - 3600000 * 12, actor: 'Admin Rao', text: 'Status → In Progress' }], verifiedRating: null, verifiedComment: null, createdAt: Date.now() - 3600000 * 48 },
+    { id: 'TK9RW4', category: '💡 Lighting', location: 'Corridor, 2nd Floor, Block A', priority: 'Medium', description: 'Four tube-lights completely dead in the corridor. Very dark after 5pm — potential safety hazard.', reporter: 'Sneha Iyer', contact: 'sneha.i@campus.edu', photo: null, status: 'Fixed', assignedTo: 'Electrician - Mr. Patel', eta: null, votes: 11, notes: [{ actor: 'Admin Rao', text: 'Replaced all 4 tubes with new LED panels.', time: Date.now() - 3600000 * 6 }], log: [{ time: Date.now() - 3600000 * 72, actor: 'System', text: 'Ticket created' }, { time: Date.now() - 3600000 * 48, actor: 'Admin Rao', text: 'Status → Assigned' }, { time: Date.now() - 3600000 * 24, actor: 'Admin Rao', text: 'Status → In Progress' }, { time: Date.now() - 3600000 * 6, actor: 'Admin Rao', text: 'Status → Fixed' }], verifiedRating: null, verifiedComment: null, createdAt: Date.now() - 3600000 * 72 },
+    { id: 'TKJC6M', category: '🚿 Plumbing', location: 'Washroom, Ground Floor, Block D', priority: 'High', description: 'Water leaking from ceiling pipe in second stall. Puddle forming on the floor — slippery and unhygienic. Bucket placed temporarily.', reporter: 'Karthik R.', contact: '9998887776', photo: null, status: 'Verified', assignedTo: 'Plumber - Mr. Singh', eta: null, votes: 19, notes: [{ actor: 'Admin Rao', text: 'Pipe joint replaced and sealed. Tested — no more leaks.', time: Date.now() - 3600000 * 4 }], log: [{ time: Date.now() - 3600000 * 96, actor: 'System', text: 'Ticket created' }, { time: Date.now() - 3600000 * 72, actor: 'Admin Rao', text: 'Status → Assigned' }, { time: Date.now() - 3600000 * 48, actor: 'Admin Rao', text: 'Status → In Progress' }, { time: Date.now() - 3600000 * 24, actor: 'Admin Rao', text: 'Status → Fixed' }, { time: Date.now() - 3600000 * 4, actor: 'Karthik R.', text: 'Verified ★★★★★ — Fixed perfectly' }], verifiedRating: 5, verifiedComment: 'Fixed perfectly', createdAt: Date.now() - 3600000 * 96 },
+    { id: 'TKN7ZE', category: '📶 WiFi/Network', location: 'Library, 1st Floor', priority: 'High', description: 'WiFi keeps disconnecting every 5 minutes on the 1st floor only. Other floors are fine. Students can\'t do online research.', reporter: 'Divya Nair', contact: 'divya.nair@campus.edu', photo: null, status: 'In Progress', assignedTo: 'IT Dept - Sanjay', eta: new Date(Date.now() + 86400000).toISOString().split('T')[0], votes: 22, notes: [{ actor: 'IT Sanjay', text: 'Access point firmware outdated. Updating firmware and repositioning AP.', time: Date.now() - 3600000 * 8 }], log: [{ time: Date.now() - 3600000 * 30, actor: 'System', text: 'Ticket created' }, { time: Date.now() - 3600000 * 20, actor: 'IT Admin', text: 'Status → Assigned' }, { time: Date.now() - 3600000 * 8, actor: 'IT Sanjay', text: 'Status → In Progress' }], verifiedRating: null, verifiedComment: null, createdAt: Date.now() - 3600000 * 30 },
+    { id: 'TK4AF8', category: '🔌 Electrical', location: 'Seminar Hall, Block E', priority: 'Medium', description: '3 out of 6 power sockets near the podium are not working. Speakers can\'t charge laptops during events.', reporter: 'Amit Verma', contact: '', photo: null, status: 'Pending', assignedTo: null, eta: null, votes: 5, notes: [], log: [{ time: Date.now() - 3600000 * 10, actor: 'System', text: 'Ticket created' }], verifiedRating: null, verifiedComment: null, createdAt: Date.now() - 3600000 * 10 },
+    { id: 'TKMP2Q', category: '🧹 Cleaning', location: 'Canteen Seating Area', priority: 'Low', description: 'Tables are sticky and not wiped after lunch hours. Dustbins overflowing by 2pm daily. Need more frequent cleaning rounds.', reporter: 'Neha Gupta', contact: 'neha.g@campus.edu', photo: null, status: 'Assigned', assignedTo: 'Housekeeping Lead', eta: null, votes: 7, notes: [{ actor: 'Admin Rao', text: 'Informed housekeeping supervisor. Extra round added at 1:30pm.', time: Date.now() - 3600000 * 5 }], log: [{ time: Date.now() - 3600000 * 20, actor: 'System', text: 'Ticket created' }, { time: Date.now() - 3600000 * 5, actor: 'Admin Rao', text: 'Status → Assigned' }], verifiedRating: null, verifiedComment: null, createdAt: Date.now() - 3600000 * 20 }
   ];
 
   /* ---------- State ---------- */
@@ -103,7 +103,6 @@
     staffView: $('#staff-view'),
     form: $('#ticket-form'),
     reporter: $('#reporter'),
-    anonToggle: $('#anon-toggle'),
     contact: $('#contact'),
     category: $('#category'),
     location: $('#location'),
@@ -350,7 +349,6 @@
     const location = el.location.value.trim();
     const priority = el.priority.value;
     const description = el.description.value.trim();
-    const isAnonymous = el.anonToggle.checked;
 
     // Validation
     if (!reporter || reporter.length < 2) { toast('Name must be at least 2 characters'); el.reporter.focus(); return; }
@@ -364,7 +362,6 @@
       category, location, priority, description,
       reporter,
       contact,
-      isAnonymous,
       photo: photoData,
       status: 'Pending',
       assignedTo: null,
@@ -610,7 +607,7 @@
         t.location.toLowerCase().includes(q) ||
         t.description.toLowerCase().includes(q) ||
         t.priority.toLowerCase().includes(q) ||
-        (t.isAnonymous ? 'anonymous' : t.reporter.toLowerCase()).includes(q)
+        t.reporter.toLowerCase().includes(q)
       );
     }
 
@@ -620,7 +617,7 @@
     }
 
     el.ticketsGrid.innerHTML = filtered.map(t => {
-      const displayName = t.isAnonymous ? '🕶️ Anonymous' : escapeHTML(t.reporter);
+      const displayName = '🕶️ Anonymous';
       const isVoted = voted.has(t.id);
       const voteClass = t.votes >= 15 ? 'vote-hot' : t.votes >= 8 ? 'vote-warm' : '';
       const labelClass = t.votes >= 15 ? 'vote-label vote-hot' : t.votes >= 8 ? 'vote-label vote-warm' : 'vote-label';
@@ -745,10 +742,7 @@
         ? `<img class="table-photo" src="${t.photo}" alt="Photo" data-action="photo" data-id="${escapeHTML(t.id)}" />`
         : '<span style="color:var(--text-muted)">—</span>';
 
-      // In staff view, always show real reporter name
-      const reporterDisplay = t.isAnonymous
-        ? `${escapeHTML(t.reporter)} <span style="font-size:.7rem;color:var(--text-muted)">(anon)</span>`
-        : escapeHTML(t.reporter);
+      const reporterDisplay = escapeHTML(t.reporter);
 
       return `<tr>
         <td><span class="ticket-id">#${escapeHTML(t.id)}</span></td>

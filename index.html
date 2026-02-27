@@ -106,17 +106,9 @@
       <form id="ticket-form" class="ticket-form">
         <h2 class="form-title">📝 Report an Issue</h2>
 
-        <label for="reporter">Your Name</label>
+        <label for="reporter">Your Name <span class="optional-tag">(kept private — only used to manage your ticket)</span></label>
         <input type="text" id="reporter" placeholder="e.g. Arjun Mehta" required minlength="2" maxlength="60" />
-
-        <!-- Anonymous toggle -->
-        <div class="anon-row">
-          <label class="anon-label">
-            <input type="checkbox" id="anon-toggle" />
-            <span class="anon-text">🕶️ Submit anonymously</span>
-          </label>
-          <span class="anon-hint">Your name will be hidden from other students</span>
-        </div>
+        <span class="anon-hint">🕶️ All submissions are anonymous — your name is never shown to other students</span>
 
         <!-- Contact -->
         <label for="contact">Phone / Email <span class="optional-tag">(for staff follow-up)</span></label>
