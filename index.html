@@ -4,11 +4,22 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>CampusFixit — Maintenance Ticket System</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
   <link rel="stylesheet" href="styles.css" />
 </head>
 <body>
   <!-- Toast container -->
   <div id="toast-container"></div>
+
+  <!-- ===== Image Lightbox Modal ===== -->
+  <div id="lightbox-modal" class="modal-overlay hidden">
+    <div class="modal lightbox-modal-content">
+      <img id="lightbox-img" src="" alt="Issue photo" />
+      <button id="lightbox-close" class="btn-verify-cancel" style="margin-top:12px;">Close</button>
+    </div>
+  </div>
 
   <!-- ===== Verification Modal ===== -->
   <div id="verify-modal" class="modal-overlay hidden">
@@ -37,16 +48,28 @@
     </div>
   </div>
 
-  <!-- ===== Staff Notes Modal ===== -->
+  <!-- ===== Staff Notes / ETA Modal ===== -->
   <div id="notes-modal" class="modal-overlay hidden">
     <div class="modal modal-wide">
       <h3 class="modal-title">📝 Staff Notes & Activity Log</h3>
       <p class="modal-subtitle" id="notes-ticket-info"></p>
+      <!-- Photo preview -->
+      <div id="notes-photo-wrap" class="notes-photo-wrap hidden">
+        <img id="notes-photo-img" src="" alt="Attached photo" class="notes-photo-img" />
+      </div>
       <div class="modal-body">
         <label for="staff-note-input">Add a note</label>
         <div class="note-input-row">
           <textarea id="staff-note-input" rows="2" placeholder="e.g. Ordered replacement part…" maxlength="500"></textarea>
           <button id="add-note-btn" class="btn-add-note">+ Add</button>
+        </div>
+        <!-- ETA picker -->
+        <div class="eta-row">
+          <label for="eta-date">Estimated Fix Date</label>
+          <div class="eta-input-row">
+            <input type="date" id="eta-date" class="eta-input" />
+            <button id="set-eta-btn" class="btn-set-eta">📅 Set ETA</button>
+          </div>
         </div>
         <div id="activity-log" class="activity-log"></div>
       </div>
@@ -68,7 +91,7 @@
       </div>
     </div>
     <div class="header-right">
-      <button id="reset-data-btn" class="reset-btn" title="Reset to demo data">🔄 Reset Demo</button>
+      <button id="reset-data-btn" class="reset-btn" title="Reset to demo data">🔄 Reset</button>
       <button id="dark-toggle" class="dark-toggle" title="Toggle Dark Mode">
         <span id="dark-icon">🌙</span>
       </button>
@@ -79,16 +102,26 @@
        STUDENT VIEW
        ============================================================ -->
   <main id="student-view" class="main-layout">
-    <!-- LEFT SIDEBAR — Submission Form -->
     <aside class="sidebar">
       <form id="ticket-form" class="ticket-form">
         <h2 class="form-title">📝 Report an Issue</h2>
 
-        <!-- Reporter Name -->
         <label for="reporter">Your Name</label>
         <input type="text" id="reporter" placeholder="e.g. Arjun Mehta" required minlength="2" maxlength="60" />
 
-        <!-- Category -->
+        <!-- Anonymous toggle -->
+        <div class="anon-row">
+          <label class="anon-label">
+            <input type="checkbox" id="anon-toggle" />
+            <span class="anon-text">🕶️ Submit anonymously</span>
+          </label>
+          <span class="anon-hint">Your name will be hidden from other students</span>
+        </div>
+
+        <!-- Contact -->
+        <label for="contact">Phone / Email <span class="optional-tag">(for staff follow-up)</span></label>
+        <input type="text" id="contact" placeholder="e.g. 9876543210 or arjun@college.edu" maxlength="80" />
+
         <label for="category">Category</label>
         <select id="category" required>
           <option value="" disabled selected>Select a category…</option>
@@ -103,47 +136,54 @@
           <option value="🔧 Other">🔧 Other</option>
         </select>
 
-        <!-- Location -->
         <label for="location">Location</label>
-        <div class="location-wrap">
-          <input type="text" id="location" placeholder="e.g. Lab 4, Block B" required minlength="3" maxlength="100" />
-          <button type="button" id="scan-qr" class="scan-qr-btn" title="Scan Room QR">
-            📷 Scan QR
-          </button>
-        </div>
+        <input type="text" id="location" placeholder="e.g. Lab 4, Block B" required minlength="3" maxlength="100" />
 
-        <!-- Priority -->
         <label for="priority">Priority</label>
         <select id="priority" required>
           <option value="" disabled selected>Select priority…</option>
-          <option value="Low">🟢 Low</option>
-          <option value="Medium">🟡 Medium</option>
-          <option value="High">🔴 High</option>
+          <option value="Low">🟢 Low — minor inconvenience</option>
+          <option value="Medium">🟡 Medium — affecting work</option>
+          <option value="High">🔴 High — urgent / safety hazard</option>
         </select>
 
-        <!-- Description -->
         <label for="description">Problem Description <span id="desc-counter" class="char-counter">0/500</span></label>
         <textarea id="description" rows="4" placeholder="Describe the issue in detail (min 10 chars)…" required minlength="10" maxlength="500"></textarea>
 
-        <!-- Submit -->
+        <!-- Photo Upload -->
+        <label>Attach Photo <span class="optional-tag">(helps staff understand the issue)</span></label>
+        <div class="photo-upload-area" id="photo-upload-area">
+          <input type="file" id="photo-input" accept="image/*" capture="environment" class="photo-file-input" />
+          <div class="photo-placeholder" id="photo-placeholder">
+            📸 <span>Tap to take photo or choose from gallery</span>
+          </div>
+          <div class="photo-preview-wrap hidden" id="photo-preview-wrap">
+            <img id="photo-preview" class="photo-preview" alt="Preview" />
+            <button type="button" id="photo-remove" class="photo-remove-btn">✕ Remove</button>
+          </div>
+        </div>
+
         <button type="submit" class="btn-submit">🚀 Submit Ticket</button>
       </form>
     </aside>
 
-    <!-- RIGHT MAIN AREA — Student Dashboard -->
     <section class="dashboard">
       <div class="dash-header">
-        <h2 class="dash-title">📋 My Tickets</h2>
-        <div class="filter-group" id="student-filters">
-          <button class="filter-btn active" data-filter="All">All</button>
-          <button class="filter-btn" data-filter="Pending">Pending</button>
-          <button class="filter-btn" data-filter="Assigned">Assigned</button>
-          <button class="filter-btn" data-filter="In Progress">In Progress</button>
-          <button class="filter-btn" data-filter="Fixed">Fixed</button>
-          <button class="filter-btn" data-filter="Verified">Verified</button>
+        <h2 class="dash-title">📋 Reported Issues</h2>
+        <div class="dash-controls">
+          <div class="search-wrap">
+            <input type="text" id="student-search" class="search-input" placeholder="🔍 Search tickets…" maxlength="100" />
+          </div>
+          <div class="filter-group" id="student-filters">
+            <button class="filter-btn active" data-filter="All">All</button>
+            <button class="filter-btn" data-filter="Pending">Pending</button>
+            <button class="filter-btn" data-filter="Assigned">Assigned</button>
+            <button class="filter-btn" data-filter="In Progress">In Progress</button>
+            <button class="filter-btn" data-filter="Fixed">Fixed</button>
+            <button class="filter-btn" data-filter="Verified">Verified</button>
+          </div>
         </div>
       </div>
-
       <div id="tickets-grid" class="tickets-grid">
         <div class="empty-state" id="empty-state">
           <p>🎉 No tickets yet — the campus is running smoothly!</p>
@@ -156,37 +196,31 @@
        STAFF VIEW
        ============================================================ -->
   <main id="staff-view" class="staff-layout hidden">
-    <!-- Stats Bar -->
     <div class="stats-bar">
-      <div class="stat-card stat-total">
-        <div class="stat-number" id="stat-total">0</div>
-        <div class="stat-label">Total</div>
-      </div>
-      <div class="stat-card stat-pending-card">
-        <div class="stat-number" id="stat-pending">0</div>
-        <div class="stat-label">Pending</div>
-      </div>
-      <div class="stat-card stat-progress-card">
-        <div class="stat-number" id="stat-progress">0</div>
-        <div class="stat-label">In Progress</div>
-      </div>
-      <div class="stat-card stat-fixed-card">
-        <div class="stat-number" id="stat-fixed">0</div>
-        <div class="stat-label">Awaiting Verify</div>
-      </div>
-      <div class="stat-card stat-verified-card">
-        <div class="stat-number" id="stat-verified">0</div>
-        <div class="stat-label">Verified</div>
-      </div>
+      <div class="stat-card stat-total"><div class="stat-number" id="stat-total">0</div><div class="stat-label">Total</div></div>
+      <div class="stat-card stat-pending-card"><div class="stat-number" id="stat-pending">0</div><div class="stat-label">Pending</div></div>
+      <div class="stat-card stat-progress-card"><div class="stat-number" id="stat-progress">0</div><div class="stat-label">In Progress</div></div>
+      <div class="stat-card stat-fixed-card"><div class="stat-number" id="stat-fixed">0</div><div class="stat-label">Awaiting Verify</div></div>
+      <div class="stat-card stat-verified-card"><div class="stat-number" id="stat-verified">0</div><div class="stat-label">Verified</div></div>
     </div>
 
-    <!-- Staff toolbar -->
     <div class="staff-toolbar">
       <h2 class="dash-title">🔧 Staff Ticket Queue</h2>
       <div class="staff-toolbar-right">
         <div class="staff-name-wrap">
-          <label for="staff-name" class="staff-name-label">👤</label>
+          <span class="staff-name-label">👤</span>
           <input type="text" id="staff-name" class="staff-name-input" placeholder="Your name (required)…" required maxlength="60" />
+        </div>
+        <div class="search-wrap">
+          <input type="text" id="staff-search" class="search-input" placeholder="🔍 Search…" maxlength="100" />
+        </div>
+        <div class="sort-wrap">
+          <select id="staff-sort" class="sort-select">
+            <option value="newest">Newest First</option>
+            <option value="oldest">Oldest First</option>
+            <option value="priority">Priority ↓</option>
+            <option value="votes">Most Voted</option>
+          </select>
         </div>
         <div class="filter-group" id="staff-filters">
           <button class="filter-btn active" data-filter="All">All</button>
@@ -200,25 +234,16 @@
       </div>
     </div>
 
-    <!-- Staff ticket table -->
     <div class="staff-table-wrap">
       <table class="staff-table" id="staff-table">
         <thead>
           <tr>
-            <th>ID</th>
-            <th>Category</th>
-            <th>Location</th>
-            <th>Priority</th>
-            <th>Reporter</th>
-            <th>Status</th>
-            <th>Assigned To</th>
-            <th>Votes</th>
-            <th>Created</th>
-            <th>Actions</th>
+            <th>ID</th><th>Category</th><th>Location</th><th>Priority</th>
+            <th>Reporter</th><th>Contact</th><th>Status</th><th>Assigned To</th>
+            <th>ETA</th><th>Votes</th><th>Photo</th><th>Created</th><th>Actions</th>
           </tr>
         </thead>
-        <tbody id="staff-tbody">
-        </tbody>
+        <tbody id="staff-tbody"></tbody>
       </table>
       <div class="empty-state" id="staff-empty">
         <p>📭 No tickets match the current filter.</p>

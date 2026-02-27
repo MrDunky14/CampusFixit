@@ -1,828 +1,773 @@
 /* ============================================================
-   CampusFixit — Application Logic (v2)
-   Staff Panel · Verification Workflow · Activity Logs
+   CampusFixit — app.js
+   Full-featured ticket system with security hardening
    ============================================================ */
-
 (() => {
   'use strict';
 
-  // ──── Constants ────
-  const STORAGE_KEY = 'campusfixit_tickets';
-  const THEME_KEY   = 'campusfixit_theme';
-  const STAFF_KEY   = 'campusfixit_staff_name';
-  const STAFF_PIN   = '1234';  // Default staff PIN — change for production
-  const VOTED_KEY    = 'campusfixit_voted';
-  const MAX_NAME_LEN     = 60;
-  const MAX_LOCATION_LEN = 100;
-  const MAX_DESC_LEN     = 500;
-  const SUBMIT_COOLDOWN  = 5000;  // ms between submissions
-  let lastSubmitTime = 0;
-  let staffAuthenticated = false;
+  /* ---------- Helpers ---------- */
+  const $ = (s, p = document) => p.querySelector(s);
+  const $$ = (s, p = document) => [...p.querySelectorAll(s)];
 
-  const MOCK_LOCATIONS = [
-    'Lab 4, Block B', 'Room 201, Block A', 'Lecture Hall 3, Block C',
-    'Library, 2nd Floor', 'Cafeteria, Ground Floor', 'Admin Office, Block D',
-    'Computer Lab 2, Block B', 'Workshop 1, Block E',
-    'Seminar Room 5, Block A', 'Room 302, Block C',
-  ];
-
-  // Status flow: Pending → Assigned → In Progress → Fixed → Verified
-  //                                                    ↘ Reopened → (back to Pending)
-
-  // ──── DOM References ────
-  // Student
-  const form          = document.getElementById('ticket-form');
-  const reporterEl    = document.getElementById('reporter');
-  const categoryEl    = document.getElementById('category');
-  const locationEl    = document.getElementById('location');
-  const priorityEl    = document.getElementById('priority');
-  const descriptionEl = document.getElementById('description');
-  const scanQrBtn     = document.getElementById('scan-qr');
-  const ticketsGrid   = document.getElementById('tickets-grid');
-  const emptyState    = document.getElementById('empty-state');
-  const studentFilters = document.querySelectorAll('#student-filters .filter-btn');
-
-  // Staff
-  const staffTbody    = document.getElementById('staff-tbody');
-  const staffEmpty    = document.getElementById('staff-empty');
-  const staffNameEl   = document.getElementById('staff-name');
-  const staffFilters  = document.querySelectorAll('#staff-filters .filter-btn');
-
-  // Stats
-  const statTotal    = document.getElementById('stat-total');
-  const statPending  = document.getElementById('stat-pending');
-  const statProgress = document.getElementById('stat-progress');
-  const statFixed    = document.getElementById('stat-fixed');
-  const statVerified = document.getElementById('stat-verified');
-
-  // Views & Role
-  const studentView  = document.getElementById('student-view');
-  const staffView    = document.getElementById('staff-view');
-  const roleBtns     = document.querySelectorAll('.role-btn');
-
-  // Dark mode
-  const darkToggle   = document.getElementById('dark-toggle');
-  const darkIcon     = document.getElementById('dark-icon');
-
-  // Toast
-  const toastContainer = document.getElementById('toast-container');
-
-  // Verify modal
-  const verifyModal      = document.getElementById('verify-modal');
-  const modalTicketInfo  = document.getElementById('modal-ticket-info');
-  const verifyComment    = document.getElementById('verify-comment');
-  const starRating       = document.getElementById('star-rating');
-  const verifyAcceptBtn  = document.getElementById('verify-accept');
-  const verifyRejectBtn  = document.getElementById('verify-reject');
-  const verifyCancelBtn  = document.getElementById('verify-cancel');
-
-  // Notes modal
-  const notesModal       = document.getElementById('notes-modal');
-  const notesTicketInfo  = document.getElementById('notes-ticket-info');
-  const staffNoteInput   = document.getElementById('staff-note-input');
-  const addNoteBtn       = document.getElementById('add-note-btn');
-  const activityLog      = document.getElementById('activity-log');
-  const notesCloseBtn    = document.getElementById('notes-close');
-
-  // ──── Seed Data ────
-  const SEED_DATA = [
-    {
-      id: '#TCKT-9B2A', category: '💻 IT/Projector', location: 'Lecture Hall 3, Block C',
-      priority: 'High', reporter: 'Arjun Mehta',
-      description: 'Projector displays a flickering image and sometimes shuts off mid-lecture. Already tried restarting it twice.',
-      status: 'Pending', assignedTo: '', createdAt: new Date(Date.now() - 1000*60*12).toISOString(),
-      log: [{ time: new Date(Date.now() - 1000*60*12).toISOString(), actor: 'Arjun Mehta', text: 'Ticket created', type: 'system' }],
-      rating: 0, verifyComment: '', votes: 12,
-    },
-    {
-      id: '#TCKT-4FX7', category: '❄️ AC/Ventilation', location: 'Room 201, Block A',
-      priority: 'Medium', reporter: 'Priya Sharma',
-      description: 'AC unit is blowing warm air. Temperature in the room is around 32 °C. Students unable to focus.',
-      status: 'Assigned', assignedTo: 'Rajesh Kumar', createdAt: new Date(Date.now() - 1000*60*45).toISOString(),
-      log: [
-        { time: new Date(Date.now() - 1000*60*45).toISOString(), actor: 'Priya Sharma', text: 'Ticket created', type: 'system' },
-        { time: new Date(Date.now() - 1000*60*30).toISOString(), actor: 'Rajesh Kumar', text: 'Assigned to self', type: 'system' },
-      ],
-      rating: 0, verifyComment: '', votes: 7,
-    },
-    {
-      id: '#TCKT-L8QW', category: '🪑 Furniture', location: 'Library, 2nd Floor',
-      priority: 'Low', reporter: 'Sneha Patel',
-      description: 'Two chairs near the group-study table have broken armrests. Not urgent but could be a safety hazard.',
-      status: 'Fixed', assignedTo: 'Anil Verma', votes: 3, createdAt: new Date(Date.now() - 1000*60*60*3).toISOString(),
-      log: [
-        { time: new Date(Date.now() - 1000*60*60*3).toISOString(), actor: 'Sneha Patel', text: 'Ticket created', type: 'system' },
-        { time: new Date(Date.now() - 1000*60*60*2).toISOString(), actor: 'Anil Verma', text: 'Assigned to self', type: 'system' },
-        { time: new Date(Date.now() - 1000*60*60*1.5).toISOString(), actor: 'Anil Verma', text: 'Started work', type: 'system' },
-        { time: new Date(Date.now() - 1000*60*60).toISOString(), actor: 'Anil Verma', text: 'Replaced both armrests. Chairs are good to use.', type: 'note' },
-        { time: new Date(Date.now() - 1000*60*55).toISOString(), actor: 'Anil Verma', text: 'Marked as Fixed — awaiting student verification', type: 'system' },
-      ],
-      rating: 0, verifyComment: '',
-    },
-    {
-      id: '#TCKT-P3MN', category: '📶 WiFi/Network', location: 'Cafeteria, Ground Floor',
-      priority: 'High', reporter: 'Rahul Gupta',
-      description: 'WiFi keeps dropping every 5 minutes. Multiple students and staff affected. Tried reconnecting — same issue.',
-      status: 'In Progress', assignedTo: 'Deepak IT', votes: 24, createdAt: new Date(Date.now() - 1000*60*25).toISOString(),
-      log: [
-        { time: new Date(Date.now() - 1000*60*25).toISOString(), actor: 'Rahul Gupta', text: 'Ticket created', type: 'system' },
-        { time: new Date(Date.now() - 1000*60*20).toISOString(), actor: 'Deepak IT', text: 'Assigned to self', type: 'system' },
-        { time: new Date(Date.now() - 1000*60*15).toISOString(), actor: 'Deepak IT', text: 'Started work', type: 'system' },
-        { time: new Date(Date.now() - 1000*60*10).toISOString(), actor: 'Deepak IT', text: 'Checking router logs. Possible firmware issue.', type: 'note' },
-      ],
-      rating: 0, verifyComment: '',
-    },
-    {
-      id: '#TCKT-7RKJ', category: '💡 Lighting', location: 'Computer Lab 2, Block B',
-      priority: 'Medium', reporter: 'Kavya Nair',
-      description: 'Three fluorescent tube lights are flickering constantly, causing eye strain during evening lab sessions.',
-      status: 'Assigned', assignedTo: 'Suresh Electricals', createdAt: new Date(Date.now() - 1000*60*60).toISOString(),
-      log: [
-        { time: new Date(Date.now() - 1000*60*60).toISOString(), actor: 'Kavya Nair', text: 'Ticket created', type: 'system' },
-        { time: new Date(Date.now() - 1000*60*50).toISOString(), actor: 'Suresh Electricals', text: 'Assigned to self', type: 'system' },
-      ],
-      rating: 0, verifyComment: '', votes: 5,
-    },
-    {
-      id: '#TCKT-2VZD', category: '🚿 Plumbing', location: 'Admin Office, Block D',
-      priority: 'High', reporter: 'Meena Iyer',
-      description: 'Washroom tap on the 1st floor is leaking non-stop. Water pooling on the floor — slip hazard.',
-      status: 'Pending', assignedTo: '', createdAt: new Date(Date.now() - 1000*60*8).toISOString(),
-      log: [{ time: new Date(Date.now() - 1000*60*8).toISOString(), actor: 'Meena Iyer', text: 'Ticket created', type: 'system' }],
-      rating: 0, verifyComment: '', votes: 18,
-    },
-    {
-      id: '#TCKT-BNXC', category: '🔌 Electrical', location: 'Workshop 1, Block E',
-      priority: 'High', reporter: 'Vikram Singh',
-      description: 'Power socket near workstation 4 is sparking when plugs are inserted. Please cut the breaker and inspect.',
-      status: 'In Progress', assignedTo: 'Suresh Electricals', votes: 9, createdAt: new Date(Date.now() - 1000*60*90).toISOString(),
-      log: [
-        { time: new Date(Date.now() - 1000*60*90).toISOString(), actor: 'Vikram Singh', text: 'Ticket created', type: 'system' },
-        { time: new Date(Date.now() - 1000*60*80).toISOString(), actor: 'Suresh Electricals', text: 'Assigned to self', type: 'system' },
-        { time: new Date(Date.now() - 1000*60*70).toISOString(), actor: 'Suresh Electricals', text: 'Started work — breaker has been turned off', type: 'system' },
-        { time: new Date(Date.now() - 1000*60*50).toISOString(), actor: 'Suresh Electricals', text: 'Internal wiring damaged. Replacing socket unit.', type: 'note' },
-      ],
-      rating: 0, verifyComment: '',
-    },
-    {
-      id: '#TCKT-6GTH', category: '🧹 Cleaning', location: 'Seminar Room 5, Block A',
-      priority: 'Low', reporter: 'Ananya Das',
-      description: 'Room was not cleaned after a workshop yesterday. Dusty tables, leftover food wrappers on the floor.',
-      status: 'Verified', assignedTo: 'Housekeeping Team', votes: 2, createdAt: new Date(Date.now() - 1000*60*60*5).toISOString(),
-      log: [
-        { time: new Date(Date.now() - 1000*60*60*5).toISOString(), actor: 'Ananya Das', text: 'Ticket created', type: 'system' },
-        { time: new Date(Date.now() - 1000*60*60*4).toISOString(), actor: 'Housekeeping Team', text: 'Assigned to self', type: 'system' },
-        { time: new Date(Date.now() - 1000*60*60*3.5).toISOString(), actor: 'Housekeeping Team', text: 'Started work', type: 'system' },
-        { time: new Date(Date.now() - 1000*60*60*3).toISOString(), actor: 'Housekeeping Team', text: 'Room fully cleaned and sanitized.', type: 'note' },
-        { time: new Date(Date.now() - 1000*60*60*2.8).toISOString(), actor: 'Housekeeping Team', text: 'Marked as Fixed — awaiting verification', type: 'system' },
-        { time: new Date(Date.now() - 1000*60*60*2).toISOString(), actor: 'Ananya Das', text: 'Verified ✅ — Room looks great! (Rating: ★★★★★)', type: 'system' },
-      ],
-      rating: 5, verifyComment: 'Room looks great!',
-    },
-  ];
-
-  // ──── State ────
-  let tickets         = loadTickets();
-  let activeRole      = 'student';
-  let studentFilter   = 'All';
-  let staffFilter     = 'All';
-  let verifyingTicketId = null;
-  let selectedRating  = 0;
-  let notesTicketId   = null;
-
-  // Seed on first visit
-  if (tickets.length === 0) {
-    tickets = JSON.parse(JSON.stringify(SEED_DATA));
-    saveTickets();
+  function escapeHTML(str) {
+    if (!str) return '';
+    const map = { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#039;' };
+    return String(str).replace(/[&<>"']/g, c => map[c]);
   }
 
-  // --- Reset dummy data ---
-  const resetBtn = document.getElementById('reset-data-btn');
-  if (resetBtn) {
-    resetBtn.addEventListener('click', () => {
-      if (!confirm('⚠️ This will erase ALL current tickets and load fresh demo data. Continue?')) return;
-      localStorage.removeItem(STORAGE_KEY);
-      localStorage.removeItem(VOTED_KEY);
-      tickets = JSON.parse(JSON.stringify(SEED_DATA));
-      saveTickets();
-      renderAll();
-      showToast('🔄 Demo data refreshed!');
-    });
-  }
-
-  // Restore staff name
-  staffNameEl.value = localStorage.getItem(STAFF_KEY) || '';
-  staffNameEl.addEventListener('input', () => {
-    localStorage.setItem(STAFF_KEY, staffNameEl.value.trim());
-  });
-
-  // --- Description character counter ---
-  const descCounter = document.getElementById('desc-counter');
-  if (descriptionEl && descCounter) {
-    descriptionEl.addEventListener('input', () => {
-      const len = descriptionEl.value.length;
-      descCounter.textContent = `${len}/${MAX_DESC_LEN}`;
-      descCounter.classList.toggle('near-limit', len >= MAX_DESC_LEN * 0.8 && len < MAX_DESC_LEN);
-      descCounter.classList.toggle('at-limit', len >= MAX_DESC_LEN);
-    });
-  }
-
-  // ──── Init ────
-  applyTheme();
-  renderAll();
-
-  // ============================================================
-  //  EVENT LISTENERS
-  // ============================================================
-
-  // --- Role switching (staff requires PIN) ---
-  roleBtns.forEach(btn => {
-    btn.addEventListener('click', () => {
-      const targetRole = btn.dataset.role;
-
-      if (targetRole === 'staff' && !staffAuthenticated) {
-        const pin = prompt('🔒 Enter Staff PIN to access the panel:');
-        if (pin !== STAFF_PIN) {
-          showToast('❌ Incorrect PIN. Access denied.');
-          return;
-        }
-        staffAuthenticated = true;
-        showToast('✅ Staff access granted');
-      }
-
-      roleBtns.forEach(b => b.classList.remove('active'));
-      btn.classList.add('active');
-      activeRole = targetRole;
-      if (activeRole === 'student') {
-        studentView.classList.remove('hidden');
-        staffView.classList.add('hidden');
-      } else {
-        studentView.classList.add('hidden');
-        staffView.classList.remove('hidden');
-      }
-      renderAll();
-    });
-  });
-
-  // --- Dark mode ---
-  darkToggle.addEventListener('click', () => {
-    document.body.classList.toggle('dark');
-    const isDark = document.body.classList.contains('dark');
-    darkIcon.textContent = isDark ? '☀️' : '🌙';
-    localStorage.setItem(THEME_KEY, isDark ? 'dark' : 'light');
-  });
-
-  // --- Student: submit (with validation & rate-limiting) ---
-  form.addEventListener('submit', (e) => {
-    e.preventDefault();
-
-    // Rate limiting
-    const now = Date.now();
-    if (now - lastSubmitTime < SUBMIT_COOLDOWN) {
-      const wait = Math.ceil((SUBMIT_COOLDOWN - (now - lastSubmitTime)) / 1000);
-      showToast(`⏳ Please wait ${wait}s before submitting again.`);
-      return;
-    }
-
-    // Input validation
-    const reporter = reporterEl.value.trim().slice(0, MAX_NAME_LEN);
-    const location = locationEl.value.trim().slice(0, MAX_LOCATION_LEN);
-    const description = descriptionEl.value.trim().slice(0, MAX_DESC_LEN);
-
-    if (!reporter || reporter.length < 2) {
-      showToast('❌ Name must be at least 2 characters.');
-      reporterEl.focus();
-      return;
-    }
-    if (!location || location.length < 3) {
-      showToast('❌ Location must be at least 3 characters.');
-      locationEl.focus();
-      return;
-    }
-    if (!description || description.length < 10) {
-      showToast('❌ Description must be at least 10 characters.');
-      descriptionEl.focus();
-      return;
-    }
-
-    const ticket = {
-      id:          generateId(),
-      category:    categoryEl.value,
-      location:    location,
-      priority:    priorityEl.value,
-      reporter:    reporter,
-      description: description,
-      status:      'Pending',
-      assignedTo:  '',
-      createdAt:   new Date().toISOString(),
-      log:         [{ time: new Date().toISOString(), actor: reporter, text: 'Ticket created', type: 'system' }],
-      rating:      0,
-      verifyComment: '',
-      votes:       0,
-    };
-    tickets.unshift(ticket);
-    saveTickets();
-    lastSubmitTime = Date.now();
-    renderAll();
-    form.reset();
-    showToast(`✅ Ticket ${ticket.id} submitted!`);
-  });
-
-  // --- QR scan mock ---
-  scanQrBtn.addEventListener('click', () => {
-    scanQrBtn.classList.add('scanning');
-    scanQrBtn.innerHTML = '<span class="qr-spinner"></span> Scanning…';
-    setTimeout(() => {
-      const loc = MOCK_LOCATIONS[Math.floor(Math.random() * MOCK_LOCATIONS.length)];
-      locationEl.value = loc;
-      scanQrBtn.classList.remove('scanning');
-      scanQrBtn.innerHTML = '📷 Scan QR';
-      showToast(`📍 Location detected: ${loc}`);
-    }, 1200);
-  });
-
-  // --- Student filters ---
-  studentFilters.forEach(btn => {
-    btn.addEventListener('click', () => {
-      studentFilters.forEach(b => b.classList.remove('active'));
-      btn.classList.add('active');
-      studentFilter = btn.dataset.filter;
-      renderStudentDashboard();
-    });
-  });
-
-  // --- Staff filters ---
-  staffFilters.forEach(btn => {
-    btn.addEventListener('click', () => {
-      staffFilters.forEach(b => b.classList.remove('active'));
-      btn.classList.add('active');
-      staffFilter = btn.dataset.filter;
-      renderStaffTable();
-    });
-  });
-
-  // --- Student card actions (verify, delete, upvote) ---
-  ticketsGrid.addEventListener('click', (e) => {
-    const verifyBtn = e.target.closest('.btn-verify');
-    if (verifyBtn) {
-      openVerifyModal(verifyBtn.dataset.ticketId);
-      return;
-    }
-    const upvoteBtn = e.target.closest('.btn-upvote');
-    if (upvoteBtn) {
-      const ticketId = upvoteBtn.dataset.ticketId;
-      const ticket = tickets.find(t => t.id === ticketId);
-      if (ticket) {
-        // Check if already voted (stored in a separate localStorage key)
-        const votedSet = getVotedSet();
-        if (votedSet.has(ticketId)) {
-          // Un-vote
-          ticket.votes = Math.max(0, (ticket.votes || 0) - 1);
-          votedSet.delete(ticketId);
-          saveVotedSet(votedSet);
-          showToast(`👎 Vote removed from ${ticketId}`);
-        } else {
-          // Upvote
-          ticket.votes = (ticket.votes || 0) + 1;
-          votedSet.add(ticketId);
-          saveVotedSet(votedSet);
-          showToast(`👍 Upvoted ${ticketId} — ${ticket.votes} votes`);
-        }
-        saveTickets();
-        renderAll();
-      }
-      return;
-    }
-    const delBtn = e.target.closest('.delete-btn');
-    if (delBtn) {
-      const ticketId = delBtn.dataset.ticketId;
-      const ticket = tickets.find(t => t.id === ticketId);
-      if (!ticket) return;
-
-      // Ownership check: only the reporter (or staff) can delete
-      const currentName = reporterEl.value.trim().toLowerCase();
-      if (activeRole === 'student' && ticket.reporter.toLowerCase() !== currentName) {
-        showToast('❌ You can only delete your own tickets. Enter your name in the form.');
-        return;
-      }
-
-      if (!confirm(`Delete ticket ${ticketId}? This cannot be undone.`)) return;
-
-      tickets = tickets.filter(t => t.id !== ticketId);
-      saveTickets();
-      renderAll();
-      showToast(`🗑️ Ticket ${ticketId} deleted`);
-    }
-  });
-
-  // --- Staff table actions (delegated) ---
-  document.getElementById('staff-table').addEventListener('click', (e) => {
-    const btn = e.target.closest('.action-btn');
-    if (!btn) return;
-    const id = btn.dataset.ticketId;
-    const action = btn.dataset.action;
-    const ticket = tickets.find(t => t.id === id);
-    if (!ticket) return;
-
-    const staffName = staffNameEl.value.trim();
-    if (!staffName) {
-      showToast('❌ Please enter your name in the Staff Name field first.');
-      staffNameEl.focus();
-      return;
-    }
-
-    switch (action) {
-      case 'assign':
-        ticket.status = 'Assigned';
-        ticket.assignedTo = staffName;
-        addLog(ticket, staffName, 'Assigned to self', 'system');
-        showToast(`📌 ${id} assigned to ${staffName}`);
-        break;
-      case 'progress':
-        ticket.status = 'In Progress';
-        addLog(ticket, staffName, 'Started work', 'system');
-        showToast(`🔨 ${id} → In Progress`);
-        break;
-      case 'done':
-        ticket.status = 'Fixed';
-        addLog(ticket, staffName, 'Marked as Fixed — awaiting student verification', 'system');
-        showToast(`✅ ${id} → Fixed (awaiting verification)`);
-        break;
-      case 'notes':
-        openNotesModal(id);
-        return;
-    }
-
-    saveTickets();
-    renderAll();
-  });
-
-  // ============================================================
-  //  VERIFY MODAL
-  // ============================================================
-
-  function openVerifyModal(ticketId) {
-    verifyingTicketId = ticketId;
-    selectedRating = 0;
-    const t = tickets.find(t => t.id === ticketId);
-    modalTicketInfo.textContent = `${t.id} — ${t.category} @ ${t.location}`;
-    verifyComment.value = '';
-    starRating.querySelectorAll('.star').forEach(s => s.classList.remove('active'));
-    verifyModal.classList.remove('hidden');
-  }
-
-  // Star rating interaction
-  starRating.addEventListener('click', (e) => {
-    const star = e.target.closest('.star');
-    if (!star) return;
-    selectedRating = parseInt(star.dataset.val);
-    starRating.querySelectorAll('.star').forEach(s => {
-      s.classList.toggle('active', parseInt(s.dataset.val) <= selectedRating);
-    });
-  });
-
-  starRating.addEventListener('mouseover', (e) => {
-    const star = e.target.closest('.star');
-    if (!star) return;
-    const val = parseInt(star.dataset.val);
-    starRating.querySelectorAll('.star').forEach(s => {
-      s.classList.toggle('active', parseInt(s.dataset.val) <= val);
-    });
-  });
-
-  starRating.addEventListener('mouseleave', () => {
-    starRating.querySelectorAll('.star').forEach(s => {
-      s.classList.toggle('active', parseInt(s.dataset.val) <= selectedRating);
-    });
-  });
-
-  verifyAcceptBtn.addEventListener('click', () => {
-    const t = tickets.find(t => t.id === verifyingTicketId);
-    if (!t) return;
-    t.status = 'Verified';
-    t.rating = selectedRating;
-    t.verifyComment = verifyComment.value.trim();
-    const ratingStr = selectedRating > 0 ? ` (Rating: ${'★'.repeat(selectedRating)}${'☆'.repeat(5 - selectedRating)})` : '';
-    const commentStr = t.verifyComment ? ` — ${t.verifyComment}` : '';
-    addLog(t, t.reporter, `Verified ✅${commentStr}${ratingStr}`, 'system');
-    saveTickets();
-    verifyModal.classList.add('hidden');
-    renderAll();
-    showToast(`✅ ${t.id} verified! Thank you.`);
-  });
-
-  verifyRejectBtn.addEventListener('click', () => {
-    const t = tickets.find(t => t.id === verifyingTicketId);
-    if (!t) return;
-    t.status = 'Reopened';
-    const commentStr = verifyComment.value.trim() ? ` — ${verifyComment.value.trim()}` : '';
-    addLog(t, t.reporter, `Reopened 🔄 Issue not resolved${commentStr}`, 'system');
-    saveTickets();
-    verifyModal.classList.add('hidden');
-    renderAll();
-    showToast(`🔄 ${t.id} reopened — staff will be notified.`);
-  });
-
-  verifyCancelBtn.addEventListener('click', () => {
-    verifyModal.classList.add('hidden');
-  });
-
-  // Close modal on backdrop click
-  verifyModal.addEventListener('click', (e) => {
-    if (e.target === verifyModal) verifyModal.classList.add('hidden');
-  });
-
-  // --- Keyboard: Escape to close modals ---
-  document.addEventListener('keydown', (e) => {
-    if (e.key === 'Escape') {
-      if (!verifyModal.classList.contains('hidden')) verifyModal.classList.add('hidden');
-      if (!notesModal.classList.contains('hidden')) notesModal.classList.add('hidden');
-    }
-  });
-
-  // ============================================================
-  //  NOTES MODAL
-  // ============================================================
-
-  function openNotesModal(ticketId) {
-    notesTicketId = ticketId;
-    const t = tickets.find(t => t.id === ticketId);
-    notesTicketInfo.textContent = `${t.id} — ${t.category} @ ${t.location}`;
-    staffNoteInput.value = '';
-    renderActivityLog(t);
-    notesModal.classList.remove('hidden');
-  }
-
-  addNoteBtn.addEventListener('click', () => {
-    const text = staffNoteInput.value.trim().slice(0, 500);
-    if (!text) {
-      showToast('❌ Note cannot be empty.');
-      return;
-    }
-    const t = tickets.find(t => t.id === notesTicketId);
-    if (!t) return;
-    const staffName = staffNameEl.value.trim();
-    if (!staffName) {
-      showToast('❌ Enter your name in the Staff Name field first.');
-      return;
-    }
-    addLog(t, staffName, text, 'note');
-    saveTickets();
-    staffNoteInput.value = '';
-    renderActivityLog(t);
-    showToast('📝 Note added');
-  });
-
-  notesCloseBtn.addEventListener('click', () => {
-    notesModal.classList.add('hidden');
-  });
-
-  notesModal.addEventListener('click', (e) => {
-    if (e.target === notesModal) notesModal.classList.add('hidden');
-  });
-
-  function renderActivityLog(ticket) {
-    if (!ticket.log || ticket.log.length === 0) {
-      activityLog.innerHTML = '<p style="color:var(--text-muted);font-size:.85rem;">No activity yet.</p>';
-      return;
-    }
-    // Staff sees everything; students see only system logs (not staff notes)
-    const visibleLog = activeRole === 'staff'
-      ? ticket.log
-      : ticket.log.filter(entry => entry.type !== 'note');
-
-    if (visibleLog.length === 0) {
-      activityLog.innerHTML = '<p style="color:var(--text-muted);font-size:.85rem;">No activity yet.</p>';
-      return;
-    }
-    activityLog.innerHTML = [...visibleLog].reverse().map(entry => `
-      <div class="log-entry log-${entry.type}">
-        <span class="log-time">${formatTime(entry.time)}</span>
-        <span class="log-actor">${escapeHTML(entry.actor)}</span>:
-        <span class="log-text">${escapeHTML(entry.text)}</span>
-      </div>
-    `).join('');
-  }
-
-  // ============================================================
-  //  RENDER FUNCTIONS
-  // ============================================================
-
-  function renderAll() {
-    renderStudentDashboard();
-    renderStaffTable();
-    renderStats();
-  }
-
-  // --- Student Dashboard ---
-  function renderStudentDashboard() {
-    const filtered = studentFilter === 'All'
-      ? tickets
-      : tickets.filter(t => t.status === studentFilter);
-
-    ticketsGrid.querySelectorAll('.ticket-card').forEach(c => c.remove());
-
-    if (filtered.length === 0) {
-      emptyState.style.display = '';
-      return;
-    }
-    emptyState.style.display = 'none';
-
-    filtered.forEach(t => {
-      const card = document.createElement('div');
-      card.className = `ticket-card priority-${t.priority}`;
-
-      // Build bottom-right actions
-      let actionsHTML = '';
-      if (t.status === 'Fixed') {
-        actionsHTML = `<button class="btn-verify" data-ticket-id="${escapeHTML(t.id)}">🔍 Verify Fix</button>`;
-      } else if (t.status === 'Verified') {
-        const stars = t.rating > 0 ? `<span class="star-display">${'★'.repeat(t.rating)}${'☆'.repeat(5 - t.rating)}</span>` : '';
-        actionsHTML = `<span class="verified-stamp">✅ Verified ${stars}</span>`;
-      }
-
-      const assignedHTML = t.assignedTo
-        ? `<div class="card-assigned">🔧 ${escapeHTML(t.assignedTo)}</div>`
-        : '';
-
-      const statusClass = t.status.replace(/\s/g, '-');
-      const voteCount = t.votes || 0;
-      const votedSet = getVotedSet();
-      const hasVoted = votedSet.has(t.id);
-      const hotClass = voteCount >= 10 ? ' vote-hot' : voteCount >= 5 ? ' vote-warm' : '';
-
-      const safeId = escapeHTML(t.id);
-      const safeCategory = escapeHTML(t.category);
-      const safeStatus = escapeHTML(t.status);
-
-      card.innerHTML = `
-        <div class="card-top">
-          <span class="ticket-id">${safeId}</span>
-          <span class="ticket-time">${formatTime(t.createdAt)}</span>
-        </div>
-        <div class="card-category">${safeCategory}</div>
-        <div class="card-location">📌 ${escapeHTML(t.location)}</div>
-        <div class="card-reporter">👤 Reported by ${escapeHTML(t.reporter)}</div>
-        ${assignedHTML}
-        <p class="card-desc">${escapeHTML(t.description)}</p>
-        <div class="card-vote-row">
-          <button class="btn-upvote${hasVoted ? ' voted' : ''}${hotClass}" data-ticket-id="${safeId}" title="${hasVoted ? 'Remove vote' : 'Upvote this issue'}">
-            <span class="upvote-arrow">▲</span>
-            <span class="upvote-count">${voteCount}</span>
-          </button>
-          <span class="vote-label${hotClass}">${voteCount >= 10 ? '🔥 Hot Issue' : voteCount >= 5 ? '⚠️ Gaining attention' : 'Upvote if affected'}</span>
-        </div>
-        <div class="card-bottom">
-          <span class="status-badge status-${statusClass}">${safeStatus}</span>
-          <div style="display:flex;align-items:center;gap:6px;">
-            ${actionsHTML}
-            <button class="delete-btn" data-ticket-id="${safeId}" title="Delete ticket">🗑️</button>
-          </div>
-        </div>
-      `;
-
-      ticketsGrid.appendChild(card);
-    });
-  }
-
-  // --- Staff Table ---
-  function renderStaffTable() {
-    const filtered = staffFilter === 'All'
-      ? tickets
-      : tickets.filter(t => t.status === staffFilter);
-
-    staffTbody.innerHTML = '';
-
-    if (filtered.length === 0) {
-      staffEmpty.style.display = '';
-      document.getElementById('staff-table').style.display = 'none';
-      return;
-    }
-    staffEmpty.style.display = 'none';
-    document.getElementById('staff-table').style.display = '';
-
-    filtered.forEach(t => {
-      const tr = document.createElement('tr');
-      const statusClass = t.status.replace(/\s/g, '-');
-
-      // Determine available actions based on status
-      let actionsHTML = '';
-      const escapedId = escapeHTML(t.id);
-      if (t.status === 'Pending' || t.status === 'Reopened') {
-        actionsHTML += `<button class="action-btn assign" data-ticket-id="${escapedId}" data-action="assign">📌 Assign</button>`;
-      }
-      if (t.status === 'Assigned') {
-        actionsHTML += `<button class="action-btn progress" data-ticket-id="${escapedId}" data-action="progress">▶ Start</button>`;
-      }
-      if (t.status === 'In Progress') {
-        actionsHTML += `<button class="action-btn done" data-ticket-id="${escapedId}" data-action="done">✅ Mark Done</button>`;
-      }
-      actionsHTML += `<button class="action-btn notes" data-ticket-id="${escapedId}" data-action="notes">📝 Notes</button>`;
-
-      const voteCount = t.votes || 0;
-      const hotBadge = voteCount >= 10 ? ' 🔥' : voteCount >= 5 ? ' ⚠️' : '';
-
-      const safeId = escapeHTML(t.id);
-      const safePriority = escapeHTML(t.priority);
-      const safeCategory = escapeHTML(t.category);
-      const safeStatus = escapeHTML(t.status);
-
-      tr.innerHTML = `
-        <td><span class="ticket-id">${safeId}</span></td>
-        <td>${safeCategory}</td>
-        <td>${escapeHTML(t.location)}</td>
-        <td><span class="priority-dot ${safePriority}"></span>${safePriority}</td>
-        <td>${escapeHTML(t.reporter)}</td>
-        <td><span class="status-badge status-${statusClass}">${safeStatus}</span></td>
-        <td>${t.assignedTo ? escapeHTML(t.assignedTo) : '<span style="color:var(--text-muted)">—</span>'}</td>
-        <td class="vote-cell"><span class="vote-count-badge${voteCount >= 10 ? ' vote-hot' : voteCount >= 5 ? ' vote-warm' : ''}">▲ ${voteCount}${hotBadge}</span></td>
-        <td style="white-space:nowrap;">${formatTime(t.createdAt)}</td>
-        <td><div class="staff-actions">${actionsHTML}</div></td>
-      `;
-
-      staffTbody.appendChild(tr);
-    });
-  }
-
-  // --- Stats ---
-  function renderStats() {
-    statTotal.textContent    = tickets.length;
-    statPending.textContent  = tickets.filter(t => t.status === 'Pending' || t.status === 'Reopened').length;
-    statProgress.textContent = tickets.filter(t => t.status === 'Assigned' || t.status === 'In Progress').length;
-    statFixed.textContent    = tickets.filter(t => t.status === 'Fixed').length;
-    statVerified.textContent = tickets.filter(t => t.status === 'Verified').length;
-  }
-
-  // ============================================================
-  //  HELPERS
-  // ============================================================
-
-  function generateId() {
-    const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
-    const existingIds = new Set(tickets.map(t => t.id));
+  function genId() {
+    const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
     let id;
-    let attempts = 0;
-    do {
-      let code = '';
-      for (let i = 0; i < 6; i++) code += chars[Math.floor(Math.random() * chars.length)];
-      id = `#TCKT-${code}`;
-      attempts++;
-    } while (existingIds.has(id) && attempts < 100);
+    do { id = ''; for (let i = 0; i < 6; i++) id += chars[Math.floor(Math.random() * chars.length)]; }
+    while (tickets.some(t => t.id === id));
     return id;
   }
 
-  function formatTime(iso) {
-    const d = new Date(iso);
-    return d.toLocaleString('en-US', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
+  function timeAgo(ts) {
+    const diff = (Date.now() - ts) / 1000;
+    if (diff < 60) return 'Just now';
+    if (diff < 3600) return `${Math.floor(diff / 60)}m ago`;
+    if (diff < 86400) return `${Math.floor(diff / 3600)}h ago`;
+    return `${Math.floor(diff / 86400)}d ago`;
   }
 
-  function escapeHTML(str) {
-    const div = document.createElement('div');
-    div.textContent = str;
-    return div.innerHTML;
+  function formatDate(ts) {
+    return new Date(ts).toLocaleString('en-IN', { dateStyle: 'medium', timeStyle: 'short' });
   }
 
-  function addLog(ticket, actor, text, type) {
-    if (!ticket.log) ticket.log = [];
-    ticket.log.push({ time: new Date().toISOString(), actor, text, type });
+  function toast(msg) {
+    const el = document.createElement('div');
+    el.className = 'toast';
+    el.textContent = msg;
+    $('#toast-container').appendChild(el);
+    setTimeout(() => el.remove(), 3600);
   }
 
-  function showToast(message) {
-    const toast = document.createElement('div');
-    toast.className = 'toast';
-    toast.textContent = message;
-    toastContainer.appendChild(toast);
-    setTimeout(() => toast.remove(), 3200);
+  /* ---------- Seed Data ---------- */
+  const SEED_DATA = [
+    { id: 'TK8X2A', category: '💻 IT/Projector', location: 'Lecture Hall 3, Block A', priority: 'High', description: 'Projector shows a large blue horizontal line across the screen. Tried restarting — still there. Faculty can\'t show slides properly.', reporter: 'Arjun Mehta', contact: 'arjun@campus.edu', isAnonymous: false, photo: null, status: 'Pending', assignedTo: null, eta: null, votes: 14, notes: [], log: [{ time: Date.now() - 3600000 * 24, actor: 'System', text: 'Ticket created' }], verifiedRating: null, verifiedComment: null, createdAt: Date.now() - 3600000 * 24 },
+    { id: 'TK3PY7', category: '❄️ AC/Ventilation', location: 'Lab 4, Block B', priority: 'Medium', description: 'AC not cooling at all — temperature goes above 35°C in afternoon. Fans alone don\'t help. Students complain daily.', reporter: 'Priya Sharma', contact: '9876543210', isAnonymous: false, photo: null, status: 'Assigned', assignedTo: 'Maintenance Team A', eta: null, votes: 8, notes: [{ actor: 'Admin Rao', text: 'Assigned to HVAC technician. Will inspect tomorrow morning.', time: Date.now() - 3600000 * 18 }], log: [{ time: Date.now() - 3600000 * 36, actor: 'System', text: 'Ticket created' }, { time: Date.now() - 3600000 * 18, actor: 'Admin Rao', text: 'Status → Assigned to Maintenance Team A' }], verifiedRating: null, verifiedComment: null, createdAt: Date.now() - 3600000 * 36 },
+    { id: 'TK5NQ9', category: '🪑 Furniture', location: 'Room 201, Block C', priority: 'Low', description: 'Three chairs have broken armrests. One has a wobbly leg. Taped up for now but needs proper repair.', reporter: 'Rahul Dev', contact: '', isAnonymous: true, photo: null, status: 'In Progress', assignedTo: 'Carpenter - Mr. Kumar', eta: new Date(Date.now() + 86400000 * 3).toISOString().split('T')[0], votes: 3, notes: [{ actor: 'Admin Rao', text: 'Carpenter scheduled for Thursday.', time: Date.now() - 3600000 * 12 }], log: [{ time: Date.now() - 3600000 * 48, actor: 'System', text: 'Ticket created' }, { time: Date.now() - 3600000 * 24, actor: 'Admin Rao', text: 'Status → Assigned' }, { time: Date.now() - 3600000 * 12, actor: 'Admin Rao', text: 'Status → In Progress' }], verifiedRating: null, verifiedComment: null, createdAt: Date.now() - 3600000 * 48 },
+    { id: 'TK9RW4', category: '💡 Lighting', location: 'Corridor, 2nd Floor, Block A', priority: 'Medium', description: 'Four tube-lights completely dead in the corridor. Very dark after 5pm — potential safety hazard.', reporter: 'Sneha Iyer', contact: 'sneha.i@campus.edu', isAnonymous: false, photo: null, status: 'Fixed', assignedTo: 'Electrician - Mr. Patel', eta: null, votes: 11, notes: [{ actor: 'Admin Rao', text: 'Replaced all 4 tubes with new LED panels.', time: Date.now() - 3600000 * 6 }], log: [{ time: Date.now() - 3600000 * 72, actor: 'System', text: 'Ticket created' }, { time: Date.now() - 3600000 * 48, actor: 'Admin Rao', text: 'Status → Assigned' }, { time: Date.now() - 3600000 * 24, actor: 'Admin Rao', text: 'Status → In Progress' }, { time: Date.now() - 3600000 * 6, actor: 'Admin Rao', text: 'Status → Fixed' }], verifiedRating: null, verifiedComment: null, createdAt: Date.now() - 3600000 * 72 },
+    { id: 'TKJC6M', category: '🚿 Plumbing', location: 'Washroom, Ground Floor, Block D', priority: 'High', description: 'Water leaking from ceiling pipe in second stall. Puddle forming on the floor — slippery and unhygienic. Bucket placed temporarily.', reporter: 'Karthik R.', contact: '9998887776', isAnonymous: false, photo: null, status: 'Verified', assignedTo: 'Plumber - Mr. Singh', eta: null, votes: 19, notes: [{ actor: 'Admin Rao', text: 'Pipe joint replaced and sealed. Tested — no more leaks.', time: Date.now() - 3600000 * 4 }], log: [{ time: Date.now() - 3600000 * 96, actor: 'System', text: 'Ticket created' }, { time: Date.now() - 3600000 * 72, actor: 'Admin Rao', text: 'Status → Assigned' }, { time: Date.now() - 3600000 * 48, actor: 'Admin Rao', text: 'Status → In Progress' }, { time: Date.now() - 3600000 * 24, actor: 'Admin Rao', text: 'Status → Fixed' }, { time: Date.now() - 3600000 * 4, actor: 'Karthik R.', text: 'Verified ★★★★★ — Fixed perfectly' }], verifiedRating: 5, verifiedComment: 'Fixed perfectly', createdAt: Date.now() - 3600000 * 96 },
+    { id: 'TKN7ZE', category: '📶 WiFi/Network', location: 'Library, 1st Floor', priority: 'High', description: 'WiFi keeps disconnecting every 5 minutes on the 1st floor only. Other floors are fine. Students can\'t do online research.', reporter: 'Divya Nair', contact: 'divya.nair@campus.edu', isAnonymous: false, photo: null, status: 'In Progress', assignedTo: 'IT Dept - Sanjay', eta: new Date(Date.now() + 86400000).toISOString().split('T')[0], votes: 22, notes: [{ actor: 'IT Sanjay', text: 'Access point firmware outdated. Updating firmware and repositioning AP.', time: Date.now() - 3600000 * 8 }], log: [{ time: Date.now() - 3600000 * 30, actor: 'System', text: 'Ticket created' }, { time: Date.now() - 3600000 * 20, actor: 'IT Admin', text: 'Status → Assigned' }, { time: Date.now() - 3600000 * 8, actor: 'IT Sanjay', text: 'Status → In Progress' }], verifiedRating: null, verifiedComment: null, createdAt: Date.now() - 3600000 * 30 },
+    { id: 'TK4AF8', category: '🔌 Electrical', location: 'Seminar Hall, Block E', priority: 'Medium', description: '3 out of 6 power sockets near the podium are not working. Speakers can\'t charge laptops during events.', reporter: 'Amit Verma', contact: '', isAnonymous: true, photo: null, status: 'Pending', assignedTo: null, eta: null, votes: 5, notes: [], log: [{ time: Date.now() - 3600000 * 10, actor: 'System', text: 'Ticket created' }], verifiedRating: null, verifiedComment: null, createdAt: Date.now() - 3600000 * 10 },
+    { id: 'TKMP2Q', category: '🧹 Cleaning', location: 'Canteen Seating Area', priority: 'Low', description: 'Tables are sticky and not wiped after lunch hours. Dustbins overflowing by 2pm daily. Need more frequent cleaning rounds.', reporter: 'Neha Gupta', contact: 'neha.g@campus.edu', isAnonymous: false, photo: null, status: 'Assigned', assignedTo: 'Housekeeping Lead', eta: null, votes: 7, notes: [{ actor: 'Admin Rao', text: 'Informed housekeeping supervisor. Extra round added at 1:30pm.', time: Date.now() - 3600000 * 5 }], log: [{ time: Date.now() - 3600000 * 20, actor: 'System', text: 'Ticket created' }, { time: Date.now() - 3600000 * 5, actor: 'Admin Rao', text: 'Status → Assigned' }], verifiedRating: null, verifiedComment: null, createdAt: Date.now() - 3600000 * 20 }
+  ];
+
+  /* ---------- State ---------- */
+  let tickets = [];
+  let currentRole = 'student';
+  let currentFilter = 'All';
+  let staffFilter = 'All';
+  let searchStudent = '';
+  let searchStaff = '';
+  let sortMode = 'newest';
+  let verifyTicketId = null;
+  let notesTicketId = null;
+  let selectedRating = 0;
+  let photoData = null; // base64 string
+  let lastSubmitTime = 0;
+  let voted = new Set();
+  const STAFF_PIN = '1234';
+  let staffAuthenticated = false;
+
+  /* ---------- DOM Refs ---------- */
+  const el = {
+    toastContainer: $('#toast-container'),
+    lightboxModal: $('#lightbox-modal'),
+    lightboxImg: $('#lightbox-img'),
+    lightboxClose: $('#lightbox-close'),
+    verifyModal: $('#verify-modal'),
+    modalTicketInfo: $('#modal-ticket-info'),
+    verifyComment: $('#verify-comment'),
+    starRating: $('#star-rating'),
+    verifyAccept: $('#verify-accept'),
+    verifyReject: $('#verify-reject'),
+    verifyCancel: $('#verify-cancel'),
+    notesModal: $('#notes-modal'),
+    notesTicketInfo: $('#notes-ticket-info'),
+    notesPhotoWrap: $('#notes-photo-wrap'),
+    notesPhotoImg: $('#notes-photo-img'),
+    staffNoteInput: $('#staff-note-input'),
+    addNoteBtn: $('#add-note-btn'),
+    etaDate: $('#eta-date'),
+    setEtaBtn: $('#set-eta-btn'),
+    activityLog: $('#activity-log'),
+    notesClose: $('#notes-close'),
+    roleBtns: $$('.role-btn'),
+    resetBtn: $('#reset-data-btn'),
+    darkToggle: $('#dark-toggle'),
+    darkIcon: $('#dark-icon'),
+    studentView: $('#student-view'),
+    staffView: $('#staff-view'),
+    form: $('#ticket-form'),
+    reporter: $('#reporter'),
+    anonToggle: $('#anon-toggle'),
+    contact: $('#contact'),
+    category: $('#category'),
+    location: $('#location'),
+    priority: $('#priority'),
+    description: $('#description'),
+    descCounter: $('#desc-counter'),
+    photoInput: $('#photo-input'),
+    photoPlaceholder: $('#photo-placeholder'),
+    photoPreviewWrap: $('#photo-preview-wrap'),
+    photoPreview: $('#photo-preview'),
+    photoRemove: $('#photo-remove'),
+    studentSearch: $('#student-search'),
+    studentFilters: $('#student-filters'),
+    ticketsGrid: $('#tickets-grid'),
+    emptyState: $('#empty-state'),
+    staffSearch: $('#staff-search'),
+    staffSort: $('#staff-sort'),
+    staffFiltersGroup: $('#staff-filters'),
+    staffTbody: $('#staff-tbody'),
+    staffEmpty: $('#staff-empty'),
+    staffName: $('#staff-name'),
+    statTotal: $('#stat-total'),
+    statPending: $('#stat-pending'),
+    statProgress: $('#stat-progress'),
+    statFixed: $('#stat-fixed'),
+    statVerified: $('#stat-verified'),
+  };
+
+  /* ---------- Persistence ---------- */
+  function save() { localStorage.setItem('campusfixit_tickets', JSON.stringify(tickets)); }
+  function load() {
+    const raw = localStorage.getItem('campusfixit_tickets');
+    if (raw) { try { tickets = JSON.parse(raw); } catch { tickets = []; } }
+    if (!tickets.length) resetToSeed();
+    const v = localStorage.getItem('campusfixit_voted');
+    if (v) { try { voted = new Set(JSON.parse(v)); } catch { voted = new Set(); } }
+  }
+  function saveVoted() { localStorage.setItem('campusfixit_voted', JSON.stringify([...voted])); }
+
+  function resetToSeed() {
+    tickets = JSON.parse(JSON.stringify(SEED_DATA));
+    voted = new Set();
+    save();
+    saveVoted();
   }
 
-  // ──── Persistence ────
-  function loadTickets() {
-    try { return JSON.parse(localStorage.getItem(STORAGE_KEY)) || []; }
-    catch { return []; }
+  /* ---------- Init ---------- */
+  function init() {
+    load();
+    // Theme
+    const savedTheme = localStorage.getItem('campusfixit_theme');
+    if (savedTheme === 'dark') document.body.classList.add('dark');
+    updateDarkIcon();
+    // Staff name
+    const sn = localStorage.getItem('campusfixit_staff_name');
+    if (sn) el.staffName.value = sn;
+    render();
+    bindEvents();
   }
 
-  function saveTickets() {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(tickets));
+  /* ---------- Event Bindings ---------- */
+  function bindEvents() {
+    // Role switching
+    el.roleBtns.forEach(btn => btn.addEventListener('click', () => switchRole(btn.dataset.role)));
+
+    // Dark mode
+    el.darkToggle.addEventListener('click', toggleDark);
+
+    // Reset
+    el.resetBtn.addEventListener('click', () => {
+      if (confirm('Reset all data to demo tickets?')) { resetToSeed(); render(); toast('Demo data restored'); }
+    });
+
+    // Form submit
+    el.form.addEventListener('submit', handleSubmit);
+
+    // Description char counter
+    el.description.addEventListener('input', updateDescCounter);
+
+    // Photo upload
+    el.photoInput.addEventListener('change', handlePhotoSelect);
+    el.photoRemove.addEventListener('click', removePhoto);
+
+    // Search
+    el.studentSearch.addEventListener('input', () => { searchStudent = el.studentSearch.value.trim(); renderStudentCards(); });
+    el.staffSearch.addEventListener('input', () => { searchStaff = el.staffSearch.value.trim(); renderStaffTable(); });
+
+    // Sort
+    el.staffSort.addEventListener('change', () => { sortMode = el.staffSort.value; renderStaffTable(); });
+
+    // Student filters
+    $$('.filter-btn', el.studentFilters).forEach(btn => btn.addEventListener('click', () => {
+      $$('.filter-btn', el.studentFilters).forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+      currentFilter = btn.dataset.filter;
+      renderStudentCards();
+    }));
+
+    // Staff filters
+    $$('.filter-btn', el.staffFiltersGroup).forEach(btn => btn.addEventListener('click', () => {
+      $$('.filter-btn', el.staffFiltersGroup).forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+      staffFilter = btn.dataset.filter;
+      renderStaffTable();
+    }));
+
+    // Staff name persist
+    el.staffName.addEventListener('change', () => {
+      localStorage.setItem('campusfixit_staff_name', el.staffName.value.trim());
+    });
+
+    // Verify modal
+    el.verifyAccept.addEventListener('click', () => handleVerify(true));
+    el.verifyReject.addEventListener('click', () => handleVerify(false));
+    el.verifyCancel.addEventListener('click', closeVerifyModal);
+
+    // Star rating
+    $$('.star', el.starRating).forEach(star => {
+      star.addEventListener('click', () => {
+        selectedRating = parseInt(star.dataset.val);
+        $$('.star', el.starRating).forEach(s => s.classList.toggle('active', parseInt(s.dataset.val) <= selectedRating));
+      });
+      star.addEventListener('mouseenter', () => {
+        const v = parseInt(star.dataset.val);
+        $$('.star', el.starRating).forEach(s => s.classList.toggle('active', parseInt(s.dataset.val) <= v));
+      });
+      star.addEventListener('mouseleave', () => {
+        $$('.star', el.starRating).forEach(s => s.classList.toggle('active', parseInt(s.dataset.val) <= selectedRating));
+      });
+    });
+
+    // Notes modal
+    el.addNoteBtn.addEventListener('click', handleAddNote);
+    el.setEtaBtn.addEventListener('click', handleSetEta);
+    el.notesClose.addEventListener('click', closeNotesModal);
+
+    // Lightbox
+    el.lightboxClose.addEventListener('click', closeLightbox);
+    el.lightboxModal.addEventListener('click', (e) => { if (e.target === el.lightboxModal) closeLightbox(); });
+
+    // Notes photo click opens lightbox
+    el.notesPhotoImg.addEventListener('click', () => {
+      const t = tickets.find(t => t.id === notesTicketId);
+      if (t && t.photo) openLightbox(t.photo);
+    });
+
+    // Escape key closes modals
+    document.addEventListener('keydown', (e) => {
+      if (e.key === 'Escape') {
+        if (!el.verifyModal.classList.contains('hidden')) closeVerifyModal();
+        if (!el.notesModal.classList.contains('hidden')) closeNotesModal();
+        if (!el.lightboxModal.classList.contains('hidden')) closeLightbox();
+      }
+    });
+
+    // Click outside modals
+    el.verifyModal.addEventListener('click', (e) => { if (e.target === el.verifyModal) closeVerifyModal(); });
+    el.notesModal.addEventListener('click', (e) => { if (e.target === el.notesModal) closeNotesModal(); });
+
+    // Delegated events for cards
+    el.ticketsGrid.addEventListener('click', handleCardClick);
+    // Delegated events for staff table
+    el.staffTbody.addEventListener('click', handleStaffClick);
   }
 
-  function applyTheme() {
-    const saved = localStorage.getItem(THEME_KEY);
-    if (saved === 'dark') {
-      document.body.classList.add('dark');
-      darkIcon.textContent = '☀️';
+  /* ---------- Role Switch ---------- */
+  function switchRole(role) {
+    if (role === 'staff' && !staffAuthenticated) {
+      const pin = prompt('🔒 Enter Staff PIN to access the panel:');
+      if (pin !== STAFF_PIN) { toast('Invalid PIN. Access denied.'); return; }
+      staffAuthenticated = true;
+    }
+    currentRole = role;
+    el.roleBtns.forEach(b => b.classList.toggle('active', b.dataset.role === role));
+    el.studentView.classList.toggle('hidden', role !== 'student');
+    el.staffView.classList.toggle('hidden', role !== 'staff');
+    render();
+  }
+
+  /* ---------- Dark Mode ---------- */
+  function toggleDark() {
+    document.body.classList.toggle('dark');
+    const isDark = document.body.classList.contains('dark');
+    localStorage.setItem('campusfixit_theme', isDark ? 'dark' : 'light');
+    updateDarkIcon();
+  }
+  function updateDarkIcon() { el.darkIcon.textContent = document.body.classList.contains('dark') ? '☀️' : '🌙'; }
+
+  /* ---------- Description Counter ---------- */
+  function updateDescCounter() {
+    const len = el.description.value.length;
+    el.descCounter.textContent = `${len}/500`;
+    el.descCounter.classList.remove('near-limit', 'at-limit');
+    if (len >= 500) el.descCounter.classList.add('at-limit');
+    else if (len >= 400) el.descCounter.classList.add('near-limit');
+  }
+
+  /* ---------- Photo ---------- */
+  function handlePhotoSelect(e) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    if (!file.type.startsWith('image/')) { toast('Please select an image file'); el.photoInput.value = ''; return; }
+    if (file.size > 5 * 1024 * 1024) { toast('Image too large (max 5MB)'); el.photoInput.value = ''; return; }
+    const reader = new FileReader();
+    reader.onload = (ev) => {
+      photoData = ev.target.result;
+      el.photoPreview.src = photoData;
+      el.photoPlaceholder.classList.add('hidden');
+      el.photoPreviewWrap.classList.remove('hidden');
+    };
+    reader.readAsDataURL(file);
+  }
+
+  function removePhoto(e) {
+    e.preventDefault();
+    e.stopPropagation();
+    photoData = null;
+    el.photoInput.value = '';
+    el.photoPreview.src = '';
+    el.photoPreviewWrap.classList.add('hidden');
+    el.photoPlaceholder.classList.remove('hidden');
+  }
+
+  /* ---------- Lightbox ---------- */
+  function openLightbox(src) {
+    el.lightboxImg.src = src;
+    el.lightboxModal.classList.remove('hidden');
+  }
+  function closeLightbox() {
+    el.lightboxModal.classList.add('hidden');
+    el.lightboxImg.src = '';
+  }
+
+  /* ---------- Submit Ticket ---------- */
+  function handleSubmit(e) {
+    e.preventDefault();
+    // Rate limiting
+    const now = Date.now();
+    if (now - lastSubmitTime < 5000) { toast('Please wait a few seconds before submitting again'); return; }
+
+    const reporter = el.reporter.value.trim();
+    const contact = el.contact.value.trim();
+    const category = el.category.value;
+    const location = el.location.value.trim();
+    const priority = el.priority.value;
+    const description = el.description.value.trim();
+    const isAnonymous = el.anonToggle.checked;
+
+    // Validation
+    if (!reporter || reporter.length < 2) { toast('Name must be at least 2 characters'); el.reporter.focus(); return; }
+    if (!category) { toast('Please select a category'); el.category.focus(); return; }
+    if (!location || location.length < 3) { toast('Location must be at least 3 characters'); el.location.focus(); return; }
+    if (!priority) { toast('Please select a priority'); el.priority.focus(); return; }
+    if (!description || description.length < 10) { toast('Description must be at least 10 characters'); el.description.focus(); return; }
+
+    const ticket = {
+      id: genId(),
+      category, location, priority, description,
+      reporter,
+      contact,
+      isAnonymous,
+      photo: photoData,
+      status: 'Pending',
+      assignedTo: null,
+      eta: null,
+      votes: 0,
+      notes: [],
+      log: [{ time: now, actor: 'System', text: 'Ticket created' }],
+      verifiedRating: null,
+      verifiedComment: null,
+      createdAt: now
+    };
+
+    tickets.unshift(ticket);
+    save();
+    lastSubmitTime = now;
+
+    // Reset form
+    el.form.reset();
+    removePhoto({ preventDefault() {}, stopPropagation() {} });
+    updateDescCounter();
+
+    toast(`Ticket #${ticket.id} submitted successfully!`);
+    render();
+  }
+
+  /* ---------- Card Click (delegated) ---------- */
+  function handleCardClick(e) {
+    const btn = e.target.closest('[data-action]');
+    if (!btn) return;
+    const id = btn.dataset.id;
+    const action = btn.dataset.action;
+
+    if (action === 'verify') openVerifyModal(id);
+    else if (action === 'delete') handleDelete(id);
+    else if (action === 'upvote') handleVote(id);
+    else if (action === 'photo') {
+      const t = tickets.find(t => t.id === id);
+      if (t && t.photo) openLightbox(t.photo);
     }
   }
 
-  // ──── Voting Persistence ────
+  /* ---------- Staff Click (delegated) ---------- */
+  function handleStaffClick(e) {
+    const btn = e.target.closest('[data-action]');
+    if (!btn) return;
+    const id = btn.dataset.id;
+    const action = btn.dataset.action;
 
-  function getVotedSet() {
-    try {
-      return new Set(JSON.parse(localStorage.getItem(VOTED_KEY)) || []);
-    } catch { return new Set(); }
+    if (action === 'assign') staffUpdateStatus(id, 'Assigned');
+    else if (action === 'progress') staffUpdateStatus(id, 'In Progress');
+    else if (action === 'done') staffUpdateStatus(id, 'Fixed');
+    else if (action === 'notes') openNotesModal(id);
+    else if (action === 'photo') {
+      const t = tickets.find(t => t.id === id);
+      if (t && t.photo) openLightbox(t.photo);
+    }
   }
 
-  function saveVotedSet(set) {
-    localStorage.setItem(VOTED_KEY, JSON.stringify([...set]));
+  /* ---------- Staff Status Update ---------- */
+  function staffUpdateStatus(id, newStatus) {
+    const staffName = el.staffName.value.trim();
+    if (!staffName) { toast('Enter your staff name before taking actions'); el.staffName.focus(); return; }
+    const t = tickets.find(t => t.id === id);
+    if (!t) return;
+
+    const validTransitions = {
+      'Pending': ['Assigned'],
+      'Assigned': ['In Progress'],
+      'In Progress': ['Fixed'],
+      'Reopened': ['Assigned'],
+    };
+    if (!validTransitions[t.status]?.includes(newStatus)) { toast(`Can't move from ${t.status} to ${newStatus}`); return; }
+
+    if (newStatus === 'Assigned') {
+      const assignee = prompt('Assign to (name/team):');
+      if (!assignee || !assignee.trim()) return;
+      t.assignedTo = assignee.trim();
+    }
+    t.status = newStatus;
+    t.log.push({ time: Date.now(), actor: staffName, text: `Status → ${newStatus}${t.assignedTo && newStatus === 'Assigned' ? ` to ${t.assignedTo}` : ''}` });
+    save();
+    toast(`Ticket #${id} → ${newStatus}`);
+    render();
   }
 
+  /* ---------- Delete Ticket ---------- */
+  function handleDelete(id) {
+    const t = tickets.find(t => t.id === id);
+    if (!t) return;
+    // Only the original reporter can delete (by name match) or staff
+    if (currentRole === 'student') {
+      const enteredName = prompt('Enter your name to confirm deletion:');
+      if (!enteredName || enteredName.trim().toLowerCase() !== t.reporter.toLowerCase()) {
+        toast('Only the original reporter can delete this ticket'); return;
+      }
+    }
+    if (!confirm(`Delete ticket #${id}?`)) return;
+    tickets = tickets.filter(t => t.id !== id);
+    save();
+    toast(`Ticket #${id} deleted`);
+    render();
+  }
+
+  /* ---------- Voting ---------- */
+  function handleVote(id) {
+    const t = tickets.find(t => t.id === id);
+    if (!t) return;
+    if (voted.has(id)) {
+      t.votes = Math.max(0, t.votes - 1);
+      voted.delete(id);
+    } else {
+      t.votes++;
+      voted.add(id);
+    }
+    save();
+    saveVoted();
+    render();
+  }
+
+  /* ---------- Verify Modal ---------- */
+  function openVerifyModal(id) {
+    const t = tickets.find(t => t.id === id);
+    if (!t || t.status !== 'Fixed') { toast('Only "Fixed" tickets can be verified'); return; }
+    verifyTicketId = id;
+    selectedRating = 0;
+    el.modalTicketInfo.textContent = `#${id} — ${t.category} @ ${t.location}`;
+    el.verifyComment.value = '';
+    $$('.star', el.starRating).forEach(s => s.classList.remove('active'));
+    el.verifyModal.classList.remove('hidden');
+  }
+
+  function closeVerifyModal() { el.verifyModal.classList.add('hidden'); verifyTicketId = null; }
+
+  function handleVerify(accepted) {
+    const t = tickets.find(t => t.id === verifyTicketId);
+    if (!t) return;
+    if (accepted) {
+      if (selectedRating === 0) { toast('Please rate the fix before verifying'); return; }
+      t.status = 'Verified';
+      t.verifiedRating = selectedRating;
+      t.verifiedComment = el.verifyComment.value.trim() || null;
+      const stars = '★'.repeat(selectedRating) + '☆'.repeat(5 - selectedRating);
+      t.log.push({ time: Date.now(), actor: t.reporter, text: `Verified ${stars}${t.verifiedComment ? ' — ' + t.verifiedComment : ''}` });
+      toast(`Ticket #${verifyTicketId} verified! Thank you.`);
+    } else {
+      t.status = 'Reopened';
+      const comment = el.verifyComment.value.trim();
+      t.log.push({ time: Date.now(), actor: t.reporter, text: `Reopened${comment ? ' — ' + comment : ''}` });
+      toast(`Ticket #${verifyTicketId} reopened for further attention`);
+    }
+    save();
+    closeVerifyModal();
+    render();
+  }
+
+  /* ---------- Notes Modal ---------- */
+  function openNotesModal(id) {
+    const t = tickets.find(t => t.id === id);
+    if (!t) return;
+    notesTicketId = id;
+    el.notesTicketInfo.textContent = `#${id} — ${escapeHTML(t.category)} @ ${escapeHTML(t.location)}`;
+    el.staffNoteInput.value = '';
+    el.etaDate.value = t.eta || '';
+
+    // Photo preview
+    if (t.photo) {
+      el.notesPhotoImg.src = t.photo;
+      el.notesPhotoWrap.classList.remove('hidden');
+    } else {
+      el.notesPhotoWrap.classList.add('hidden');
+    }
+
+    renderActivityLog(t);
+    el.notesModal.classList.remove('hidden');
+  }
+
+  function closeNotesModal() { el.notesModal.classList.add('hidden'); notesTicketId = null; }
+
+  function handleAddNote() {
+    const staffName = el.staffName.value.trim();
+    if (!staffName) { toast('Enter your staff name first'); el.staffName.focus(); return; }
+    const text = el.staffNoteInput.value.trim();
+    if (!text) { toast('Enter a note'); return; }
+    if (text.length > 500) { toast('Note too long (max 500 chars)'); return; }
+
+    const t = tickets.find(t => t.id === notesTicketId);
+    if (!t) return;
+    t.notes.push({ actor: staffName, text, time: Date.now() });
+    t.log.push({ time: Date.now(), actor: staffName, text: `Note: ${text}` });
+    save();
+    el.staffNoteInput.value = '';
+    renderActivityLog(t);
+    toast('Note added');
+  }
+
+  function handleSetEta() {
+    const t = tickets.find(t => t.id === notesTicketId);
+    if (!t) return;
+    const staffName = el.staffName.value.trim();
+    if (!staffName) { toast('Enter your staff name first'); el.staffName.focus(); return; }
+    const date = el.etaDate.value;
+    if (!date) { toast('Select a date'); return; }
+    t.eta = date;
+    t.log.push({ time: Date.now(), actor: staffName, text: `ETA set to ${date}` });
+    save();
+    toast(`ETA set to ${date}`);
+    renderActivityLog(t);
+    render();
+  }
+
+  function renderActivityLog(t) {
+    // Show latest first
+    const logs = [...t.log].reverse();
+    el.activityLog.innerHTML = logs.map(l => {
+      const isSystem = l.actor === 'System';
+      const isNote = l.text.startsWith('Note:');
+      let cls = 'log-entry';
+      if (isSystem) cls += ' log-system';
+      else if (isNote) cls += ' log-note';
+      return `<div class="${cls}"><span class="log-time">${formatDate(l.time)}</span><span class="log-actor">${escapeHTML(l.actor)}</span> — ${escapeHTML(l.text)}</div>`;
+    }).join('');
+  }
+
+  /* ---------- Render ---------- */
+  function render() {
+    if (currentRole === 'student') renderStudentCards();
+    else renderStaffView();
+  }
+
+  /* ----- Student Cards ----- */
+  function renderStudentCards() {
+    let filtered = tickets;
+
+    // Filter
+    if (currentFilter !== 'All') filtered = filtered.filter(t => t.status === currentFilter);
+
+    // Search
+    if (searchStudent) {
+      const q = searchStudent.toLowerCase();
+      filtered = filtered.filter(t =>
+        t.id.toLowerCase().includes(q) ||
+        t.category.toLowerCase().includes(q) ||
+        t.location.toLowerCase().includes(q) ||
+        t.description.toLowerCase().includes(q) ||
+        t.priority.toLowerCase().includes(q) ||
+        (t.isAnonymous ? 'anonymous' : t.reporter.toLowerCase()).includes(q)
+      );
+    }
+
+    if (!filtered.length) {
+      el.ticketsGrid.innerHTML = '<div class="empty-state"><p>🔍 No tickets match your search or filter.</p></div>';
+      return;
+    }
+
+    el.ticketsGrid.innerHTML = filtered.map(t => {
+      const displayName = t.isAnonymous ? '🕶️ Anonymous' : escapeHTML(t.reporter);
+      const isVoted = voted.has(t.id);
+      const voteClass = t.votes >= 15 ? 'vote-hot' : t.votes >= 8 ? 'vote-warm' : '';
+      const labelClass = t.votes >= 15 ? 'vote-label vote-hot' : t.votes >= 8 ? 'vote-label vote-warm' : 'vote-label';
+      const voteLabel = t.votes >= 15 ? '🔥 Trending' : t.votes >= 8 ? '⚡ Popular' : `${t.votes} vote${t.votes !== 1 ? 's' : ''}`;
+      const statusCls = `status-${t.status.replace(/\s/g, '-')}`;
+
+      let photoHTML = '';
+      if (t.photo) {
+        photoHTML = `<img class="card-photo" src="${t.photo}" alt="Issue photo" data-action="photo" data-id="${escapeHTML(t.id)}" />`;
+      }
+
+      let etaHTML = '';
+      if (t.eta) etaHTML = `<div class="card-eta">📅 ETA: ${escapeHTML(t.eta)}</div>`;
+
+      let assignedHTML = '';
+      if (t.assignedTo) assignedHTML = `<div class="card-assigned">👷 ${escapeHTML(t.assignedTo)}</div>`;
+
+      let verifyBtn = '';
+      if (t.status === 'Fixed') verifyBtn = `<button class="btn-verify" data-action="verify" data-id="${escapeHTML(t.id)}">✅ Verify Fix</button>`;
+
+      let verifiedStamp = '';
+      if (t.status === 'Verified' && t.verifiedRating) {
+        const stars = '★'.repeat(t.verifiedRating) + '☆'.repeat(5 - t.verifiedRating);
+        verifiedStamp = `<div class="verified-stamp">✅ Verified <span class="star-display">${stars}</span></div>`;
+      }
+
+      let deleteBtn = '';
+      if (t.status === 'Pending') deleteBtn = `<button class="delete-btn" data-action="delete" data-id="${escapeHTML(t.id)}" title="Delete">🗑️</button>`;
+
+      return `
+        <div class="ticket-card priority-${escapeHTML(t.priority)}">
+          <div class="card-top">
+            <span class="ticket-id">#${escapeHTML(t.id)}</span>
+            <span class="ticket-time">${timeAgo(t.createdAt)}</span>
+          </div>
+          <div class="card-category">${escapeHTML(t.category)}</div>
+          <div class="card-location">📍 ${escapeHTML(t.location)}</div>
+          <div class="card-reporter">by ${displayName}</div>
+          <div class="card-desc">${escapeHTML(t.description)}</div>
+          ${photoHTML}
+          ${etaHTML}
+          ${assignedHTML}
+          <div class="card-vote-row">
+            <button class="btn-upvote ${isVoted ? 'voted' : ''} ${voteClass}" data-action="upvote" data-id="${escapeHTML(t.id)}">
+              <span class="upvote-arrow">▲</span>
+              <span class="upvote-count">${t.votes}</span>
+            </button>
+            <span class="${labelClass}">${voteLabel}</span>
+          </div>
+          <div class="card-bottom">
+            <span class="status-badge ${statusCls}">${escapeHTML(t.status)}</span>
+            <div style="display:flex;gap:8px;align-items:center;">
+              ${verifyBtn}
+              ${verifiedStamp}
+              ${deleteBtn}
+            </div>
+          </div>
+        </div>`;
+    }).join('');
+  }
+
+  /* ----- Staff View ----- */
+  function renderStaffView() {
+    updateStats();
+    renderStaffTable();
+  }
+
+  function updateStats() {
+    el.statTotal.textContent = tickets.length;
+    el.statPending.textContent = tickets.filter(t => t.status === 'Pending' || t.status === 'Reopened').length;
+    el.statProgress.textContent = tickets.filter(t => t.status === 'In Progress' || t.status === 'Assigned').length;
+    el.statFixed.textContent = tickets.filter(t => t.status === 'Fixed').length;
+    el.statVerified.textContent = tickets.filter(t => t.status === 'Verified').length;
+  }
+
+  function renderStaffTable() {
+    let filtered = tickets;
+
+    // Filter
+    if (staffFilter !== 'All') filtered = filtered.filter(t => t.status === staffFilter);
+
+    // Search
+    if (searchStaff) {
+      const q = searchStaff.toLowerCase();
+      filtered = filtered.filter(t =>
+        t.id.toLowerCase().includes(q) ||
+        t.category.toLowerCase().includes(q) ||
+        t.location.toLowerCase().includes(q) ||
+        t.description.toLowerCase().includes(q) ||
+        t.reporter.toLowerCase().includes(q) ||
+        (t.assignedTo || '').toLowerCase().includes(q) ||
+        (t.contact || '').toLowerCase().includes(q)
+      );
+    }
+
+    // Sort
+    const priorityOrder = { High: 0, Medium: 1, Low: 2 };
+    if (sortMode === 'newest') filtered.sort((a, b) => b.createdAt - a.createdAt);
+    else if (sortMode === 'oldest') filtered.sort((a, b) => a.createdAt - b.createdAt);
+    else if (sortMode === 'priority') filtered.sort((a, b) => (priorityOrder[a.priority] ?? 9) - (priorityOrder[b.priority] ?? 9));
+    else if (sortMode === 'votes') filtered.sort((a, b) => b.votes - a.votes);
+
+    if (!filtered.length) {
+      el.staffTbody.innerHTML = '';
+      el.staffEmpty.classList.remove('hidden');
+      return;
+    }
+    el.staffEmpty.classList.add('hidden');
+
+    el.staffTbody.innerHTML = filtered.map(t => {
+      const statusCls = `status-${t.status.replace(/\s/g, '-')}`;
+      const voteClass = t.votes >= 15 ? 'vote-hot' : t.votes >= 8 ? 'vote-warm' : '';
+
+      // Action buttons based on status
+      let actions = '';
+      if (t.status === 'Pending' || t.status === 'Reopened') actions += `<button class="action-btn assign" data-action="assign" data-id="${escapeHTML(t.id)}">Assign</button>`;
+      if (t.status === 'Assigned') actions += `<button class="action-btn progress" data-action="progress" data-id="${escapeHTML(t.id)}">Start</button>`;
+      if (t.status === 'In Progress') actions += `<button class="action-btn done" data-action="done" data-id="${escapeHTML(t.id)}">Mark Fixed</button>`;
+      actions += `<button class="action-btn notes" data-action="notes" data-id="${escapeHTML(t.id)}">Notes</button>`;
+
+      const photoCell = t.photo
+        ? `<img class="table-photo" src="${t.photo}" alt="Photo" data-action="photo" data-id="${escapeHTML(t.id)}" />`
+        : '<span style="color:var(--text-muted)">—</span>';
+
+      // In staff view, always show real reporter name
+      const reporterDisplay = t.isAnonymous
+        ? `${escapeHTML(t.reporter)} <span style="font-size:.7rem;color:var(--text-muted)">(anon)</span>`
+        : escapeHTML(t.reporter);
+
+      return `<tr>
+        <td><span class="ticket-id">#${escapeHTML(t.id)}</span></td>
+        <td>${escapeHTML(t.category)}</td>
+        <td>${escapeHTML(t.location)}</td>
+        <td><span class="priority-dot ${escapeHTML(t.priority)}"></span>${escapeHTML(t.priority)}</td>
+        <td>${reporterDisplay}</td>
+        <td>${escapeHTML(t.contact || '—')}</td>
+        <td><span class="status-badge ${statusCls}">${escapeHTML(t.status)}</span></td>
+        <td>${escapeHTML(t.assignedTo || '—')}</td>
+        <td>${t.eta ? escapeHTML(t.eta) : '—'}</td>
+        <td class="vote-cell"><span class="vote-count-badge ${voteClass}">▲ ${t.votes}</span></td>
+        <td>${photoCell}</td>
+        <td>${timeAgo(t.createdAt)}</td>
+        <td><div class="staff-actions">${actions}</div></td>
+      </tr>`;
+    }).join('');
+  }
+
+  /* ---------- Start ---------- */
+  init();
 })();
