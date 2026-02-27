@@ -10,6 +10,14 @@
   const STORAGE_KEY = 'campusfixit_tickets';
   const THEME_KEY   = 'campusfixit_theme';
   const STAFF_KEY   = 'campusfixit_staff_name';
+  const STAFF_PIN   = '1234';  // Default staff PIN — change for production
+  const VOTED_KEY    = 'campusfixit_voted';
+  const MAX_NAME_LEN     = 60;
+  const MAX_LOCATION_LEN = 100;
+  const MAX_DESC_LEN     = 500;
+  const SUBMIT_COOLDOWN  = 5000;  // ms between submissions
+  let lastSubmitTime = 0;
+  let staffAuthenticated = false;
 
   const MOCK_LOCATIONS = [
     'Lab 4, Block B', 'Room 201, Block A', 'Lecture Hall 3, Block C',
@@ -184,8 +192,22 @@
 
   // Seed on first visit
   if (tickets.length === 0) {
-    tickets = SEED_DATA;
+    tickets = JSON.parse(JSON.stringify(SEED_DATA));
     saveTickets();
+  }
+
+  // --- Reset dummy data ---
+  const resetBtn = document.getElementById('reset-data-btn');
+  if (resetBtn) {
+    resetBtn.addEventListener('click', () => {
+      if (!confirm('⚠️ This will erase ALL current tickets and load fresh demo data. Continue?')) return;
+      localStorage.removeItem(STORAGE_KEY);
+      localStorage.removeItem(VOTED_KEY);
+      tickets = JSON.parse(JSON.stringify(SEED_DATA));
+      saveTickets();
+      renderAll();
+      showToast('🔄 Demo data refreshed!');
+    });
   }
 
   // Restore staff name
@@ -193,6 +215,17 @@
   staffNameEl.addEventListener('input', () => {
     localStorage.setItem(STAFF_KEY, staffNameEl.value.trim());
   });
+
+  // --- Description character counter ---
+  const descCounter = document.getElementById('desc-counter');
+  if (descriptionEl && descCounter) {
+    descriptionEl.addEventListener('input', () => {
+      const len = descriptionEl.value.length;
+      descCounter.textContent = `${len}/${MAX_DESC_LEN}`;
+      descCounter.classList.toggle('near-limit', len >= MAX_DESC_LEN * 0.8 && len < MAX_DESC_LEN);
+      descCounter.classList.toggle('at-limit', len >= MAX_DESC_LEN);
+    });
+  }
 
   // ──── Init ────
   applyTheme();
@@ -202,12 +235,24 @@
   //  EVENT LISTENERS
   // ============================================================
 
-  // --- Role switching ---
+  // --- Role switching (staff requires PIN) ---
   roleBtns.forEach(btn => {
     btn.addEventListener('click', () => {
+      const targetRole = btn.dataset.role;
+
+      if (targetRole === 'staff' && !staffAuthenticated) {
+        const pin = prompt('🔒 Enter Staff PIN to access the panel:');
+        if (pin !== STAFF_PIN) {
+          showToast('❌ Incorrect PIN. Access denied.');
+          return;
+        }
+        staffAuthenticated = true;
+        showToast('✅ Staff access granted');
+      }
+
       roleBtns.forEach(b => b.classList.remove('active'));
       btn.classList.add('active');
-      activeRole = btn.dataset.role;
+      activeRole = targetRole;
       if (activeRole === 'student') {
         studentView.classList.remove('hidden');
         staffView.classList.add('hidden');
@@ -227,26 +272,57 @@
     localStorage.setItem(THEME_KEY, isDark ? 'dark' : 'light');
   });
 
-  // --- Student: submit ---
+  // --- Student: submit (with validation & rate-limiting) ---
   form.addEventListener('submit', (e) => {
     e.preventDefault();
+
+    // Rate limiting
+    const now = Date.now();
+    if (now - lastSubmitTime < SUBMIT_COOLDOWN) {
+      const wait = Math.ceil((SUBMIT_COOLDOWN - (now - lastSubmitTime)) / 1000);
+      showToast(`⏳ Please wait ${wait}s before submitting again.`);
+      return;
+    }
+
+    // Input validation
+    const reporter = reporterEl.value.trim().slice(0, MAX_NAME_LEN);
+    const location = locationEl.value.trim().slice(0, MAX_LOCATION_LEN);
+    const description = descriptionEl.value.trim().slice(0, MAX_DESC_LEN);
+
+    if (!reporter || reporter.length < 2) {
+      showToast('❌ Name must be at least 2 characters.');
+      reporterEl.focus();
+      return;
+    }
+    if (!location || location.length < 3) {
+      showToast('❌ Location must be at least 3 characters.');
+      locationEl.focus();
+      return;
+    }
+    if (!description || description.length < 10) {
+      showToast('❌ Description must be at least 10 characters.');
+      descriptionEl.focus();
+      return;
+    }
+
     const ticket = {
       id:          generateId(),
       category:    categoryEl.value,
-      location:    locationEl.value.trim(),
+      location:    location,
       priority:    priorityEl.value,
-      reporter:    reporterEl.value.trim(),
-      description: descriptionEl.value.trim(),
+      reporter:    reporter,
+      description: description,
       status:      'Pending',
       assignedTo:  '',
       createdAt:   new Date().toISOString(),
-      log:         [{ time: new Date().toISOString(), actor: reporterEl.value.trim(), text: 'Ticket created', type: 'system' }],
+      log:         [{ time: new Date().toISOString(), actor: reporter, text: 'Ticket created', type: 'system' }],
       rating:      0,
       verifyComment: '',
       votes:       0,
     };
     tickets.unshift(ticket);
     saveTickets();
+    lastSubmitTime = Date.now();
     renderAll();
     form.reset();
     showToast(`✅ Ticket ${ticket.id} submitted!`);
@@ -319,10 +395,23 @@
     }
     const delBtn = e.target.closest('.delete-btn');
     if (delBtn) {
-      tickets = tickets.filter(t => t.id !== delBtn.dataset.ticketId);
+      const ticketId = delBtn.dataset.ticketId;
+      const ticket = tickets.find(t => t.id === ticketId);
+      if (!ticket) return;
+
+      // Ownership check: only the reporter (or staff) can delete
+      const currentName = reporterEl.value.trim().toLowerCase();
+      if (activeRole === 'student' && ticket.reporter.toLowerCase() !== currentName) {
+        showToast('❌ You can only delete your own tickets. Enter your name in the form.');
+        return;
+      }
+
+      if (!confirm(`Delete ticket ${ticketId}? This cannot be undone.`)) return;
+
+      tickets = tickets.filter(t => t.id !== ticketId);
       saveTickets();
       renderAll();
-      showToast(`🗑️ Ticket deleted`);
+      showToast(`🗑️ Ticket ${ticketId} deleted`);
     }
   });
 
@@ -335,7 +424,12 @@
     const ticket = tickets.find(t => t.id === id);
     if (!ticket) return;
 
-    const staffName = staffNameEl.value.trim() || 'Staff';
+    const staffName = staffNameEl.value.trim();
+    if (!staffName) {
+      showToast('❌ Please enter your name in the Staff Name field first.');
+      staffNameEl.focus();
+      return;
+    }
 
     switch (action) {
       case 'assign':
@@ -438,6 +532,14 @@
     if (e.target === verifyModal) verifyModal.classList.add('hidden');
   });
 
+  // --- Keyboard: Escape to close modals ---
+  document.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape') {
+      if (!verifyModal.classList.contains('hidden')) verifyModal.classList.add('hidden');
+      if (!notesModal.classList.contains('hidden')) notesModal.classList.add('hidden');
+    }
+  });
+
   // ============================================================
   //  NOTES MODAL
   // ============================================================
@@ -452,11 +554,18 @@
   }
 
   addNoteBtn.addEventListener('click', () => {
-    const text = staffNoteInput.value.trim();
-    if (!text) return;
+    const text = staffNoteInput.value.trim().slice(0, 500);
+    if (!text) {
+      showToast('❌ Note cannot be empty.');
+      return;
+    }
     const t = tickets.find(t => t.id === notesTicketId);
     if (!t) return;
-    const staffName = staffNameEl.value.trim() || 'Staff';
+    const staffName = staffNameEl.value.trim();
+    if (!staffName) {
+      showToast('❌ Enter your name in the Staff Name field first.');
+      return;
+    }
     addLog(t, staffName, text, 'note');
     saveTickets();
     staffNoteInput.value = '';
@@ -526,7 +635,7 @@
       // Build bottom-right actions
       let actionsHTML = '';
       if (t.status === 'Fixed') {
-        actionsHTML = `<button class="btn-verify" data-ticket-id="${t.id}">🔍 Verify Fix</button>`;
+        actionsHTML = `<button class="btn-verify" data-ticket-id="${escapeHTML(t.id)}">🔍 Verify Fix</button>`;
       } else if (t.status === 'Verified') {
         const stars = t.rating > 0 ? `<span class="star-display">${'★'.repeat(t.rating)}${'☆'.repeat(5 - t.rating)}</span>` : '';
         actionsHTML = `<span class="verified-stamp">✅ Verified ${stars}</span>`;
@@ -542,28 +651,32 @@
       const hasVoted = votedSet.has(t.id);
       const hotClass = voteCount >= 10 ? ' vote-hot' : voteCount >= 5 ? ' vote-warm' : '';
 
+      const safeId = escapeHTML(t.id);
+      const safeCategory = escapeHTML(t.category);
+      const safeStatus = escapeHTML(t.status);
+
       card.innerHTML = `
         <div class="card-top">
-          <span class="ticket-id">${t.id}</span>
+          <span class="ticket-id">${safeId}</span>
           <span class="ticket-time">${formatTime(t.createdAt)}</span>
         </div>
-        <div class="card-category">${t.category}</div>
+        <div class="card-category">${safeCategory}</div>
         <div class="card-location">📌 ${escapeHTML(t.location)}</div>
         <div class="card-reporter">👤 Reported by ${escapeHTML(t.reporter)}</div>
         ${assignedHTML}
         <p class="card-desc">${escapeHTML(t.description)}</p>
         <div class="card-vote-row">
-          <button class="btn-upvote${hasVoted ? ' voted' : ''}${hotClass}" data-ticket-id="${t.id}" title="${hasVoted ? 'Remove vote' : 'Upvote this issue'}">
+          <button class="btn-upvote${hasVoted ? ' voted' : ''}${hotClass}" data-ticket-id="${safeId}" title="${hasVoted ? 'Remove vote' : 'Upvote this issue'}">
             <span class="upvote-arrow">▲</span>
             <span class="upvote-count">${voteCount}</span>
           </button>
           <span class="vote-label${hotClass}">${voteCount >= 10 ? '🔥 Hot Issue' : voteCount >= 5 ? '⚠️ Gaining attention' : 'Upvote if affected'}</span>
         </div>
         <div class="card-bottom">
-          <span class="status-badge status-${statusClass}">${t.status}</span>
+          <span class="status-badge status-${statusClass}">${safeStatus}</span>
           <div style="display:flex;align-items:center;gap:6px;">
             ${actionsHTML}
-            <button class="delete-btn" data-ticket-id="${t.id}" title="Delete ticket">🗑️</button>
+            <button class="delete-btn" data-ticket-id="${safeId}" title="Delete ticket">🗑️</button>
           </div>
         </div>
       `;
@@ -594,27 +707,33 @@
 
       // Determine available actions based on status
       let actionsHTML = '';
+      const escapedId = escapeHTML(t.id);
       if (t.status === 'Pending' || t.status === 'Reopened') {
-        actionsHTML += `<button class="action-btn assign" data-ticket-id="${t.id}" data-action="assign">📌 Assign</button>`;
+        actionsHTML += `<button class="action-btn assign" data-ticket-id="${escapedId}" data-action="assign">📌 Assign</button>`;
       }
       if (t.status === 'Assigned') {
-        actionsHTML += `<button class="action-btn progress" data-ticket-id="${t.id}" data-action="progress">▶ Start</button>`;
+        actionsHTML += `<button class="action-btn progress" data-ticket-id="${escapedId}" data-action="progress">▶ Start</button>`;
       }
       if (t.status === 'In Progress') {
-        actionsHTML += `<button class="action-btn done" data-ticket-id="${t.id}" data-action="done">✅ Mark Done</button>`;
+        actionsHTML += `<button class="action-btn done" data-ticket-id="${escapedId}" data-action="done">✅ Mark Done</button>`;
       }
-      actionsHTML += `<button class="action-btn notes" data-ticket-id="${t.id}" data-action="notes">📝 Notes</button>`;
+      actionsHTML += `<button class="action-btn notes" data-ticket-id="${escapedId}" data-action="notes">📝 Notes</button>`;
 
       const voteCount = t.votes || 0;
       const hotBadge = voteCount >= 10 ? ' 🔥' : voteCount >= 5 ? ' ⚠️' : '';
 
+      const safeId = escapeHTML(t.id);
+      const safePriority = escapeHTML(t.priority);
+      const safeCategory = escapeHTML(t.category);
+      const safeStatus = escapeHTML(t.status);
+
       tr.innerHTML = `
-        <td><span class="ticket-id">${t.id}</span></td>
-        <td>${t.category}</td>
+        <td><span class="ticket-id">${safeId}</span></td>
+        <td>${safeCategory}</td>
         <td>${escapeHTML(t.location)}</td>
-        <td><span class="priority-dot ${t.priority}"></span>${t.priority}</td>
+        <td><span class="priority-dot ${safePriority}"></span>${safePriority}</td>
         <td>${escapeHTML(t.reporter)}</td>
-        <td><span class="status-badge status-${statusClass}">${t.status}</span></td>
+        <td><span class="status-badge status-${statusClass}">${safeStatus}</span></td>
         <td>${t.assignedTo ? escapeHTML(t.assignedTo) : '<span style="color:var(--text-muted)">—</span>'}</td>
         <td class="vote-cell"><span class="vote-count-badge${voteCount >= 10 ? ' vote-hot' : voteCount >= 5 ? ' vote-warm' : ''}">▲ ${voteCount}${hotBadge}</span></td>
         <td style="white-space:nowrap;">${formatTime(t.createdAt)}</td>
@@ -640,9 +759,16 @@
 
   function generateId() {
     const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
-    let code = '';
-    for (let i = 0; i < 4; i++) code += chars[Math.floor(Math.random() * chars.length)];
-    return `#TCKT-${code}`;
+    const existingIds = new Set(tickets.map(t => t.id));
+    let id;
+    let attempts = 0;
+    do {
+      let code = '';
+      for (let i = 0; i < 6; i++) code += chars[Math.floor(Math.random() * chars.length)];
+      id = `#TCKT-${code}`;
+      attempts++;
+    } while (existingIds.has(id) && attempts < 100);
+    return id;
   }
 
   function formatTime(iso) {
@@ -688,7 +814,6 @@
   }
 
   // ──── Voting Persistence ────
-  const VOTED_KEY = 'campusfixit_voted';
 
   function getVotedSet() {
     try {

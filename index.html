@@ -17,7 +17,7 @@
       <p class="modal-subtitle" id="modal-ticket-info"></p>
       <div class="modal-body">
         <label for="verify-comment">Comment (optional)</label>
-        <textarea id="verify-comment" rows="3" placeholder="Any feedback on the repair…"></textarea>
+        <textarea id="verify-comment" rows="3" placeholder="Any feedback on the repair…" maxlength="300"></textarea>
         <div class="modal-rating">
           <label>Rate the fix</label>
           <div class="stars" id="star-rating">
@@ -45,7 +45,7 @@
       <div class="modal-body">
         <label for="staff-note-input">Add a note</label>
         <div class="note-input-row">
-          <textarea id="staff-note-input" rows="2" placeholder="e.g. Ordered replacement part…"></textarea>
+          <textarea id="staff-note-input" rows="2" placeholder="e.g. Ordered replacement part…" maxlength="500"></textarea>
           <button id="add-note-btn" class="btn-add-note">+ Add</button>
         </div>
         <div id="activity-log" class="activity-log"></div>
@@ -68,6 +68,7 @@
       </div>
     </div>
     <div class="header-right">
+      <button id="reset-data-btn" class="reset-btn" title="Reset to demo data">🔄 Reset Demo</button>
       <button id="dark-toggle" class="dark-toggle" title="Toggle Dark Mode">
         <span id="dark-icon">🌙</span>
       </button>
@@ -85,7 +86,7 @@
 
         <!-- Reporter Name -->
         <label for="reporter">Your Name</label>
-        <input type="text" id="reporter" placeholder="e.g. Arjun Mehta" required />
+        <input type="text" id="reporter" placeholder="e.g. Arjun Mehta" required minlength="2" maxlength="60" />
 
         <!-- Category -->
         <label for="category">Category</label>
@@ -105,7 +106,7 @@
         <!-- Location -->
         <label for="location">Location</label>
         <div class="location-wrap">
-          <input type="text" id="location" placeholder="e.g. Lab 4, Block B" required />
+          <input type="text" id="location" placeholder="e.g. Lab 4, Block B" required minlength="3" maxlength="100" />
           <button type="button" id="scan-qr" class="scan-qr-btn" title="Scan Room QR">
             📷 Scan QR
           </button>
@@ -121,8 +122,8 @@
         </select>
 
         <!-- Description -->
-        <label for="description">Problem Description</label>
-        <textarea id="description" rows="4" placeholder="Describe the issue in detail…" required></textarea>
+        <label for="description">Problem Description <span id="desc-counter" class="char-counter">0/500</span></label>
+        <textarea id="description" rows="4" placeholder="Describe the issue in detail (min 10 chars)…" required minlength="10" maxlength="500"></textarea>
 
         <!-- Submit -->
         <button type="submit" class="btn-submit">🚀 Submit Ticket</button>
@@ -185,7 +186,7 @@
       <div class="staff-toolbar-right">
         <div class="staff-name-wrap">
           <label for="staff-name" class="staff-name-label">👤</label>
-          <input type="text" id="staff-name" class="staff-name-input" placeholder="Your name…" />
+          <input type="text" id="staff-name" class="staff-name-input" placeholder="Your name (required)…" required maxlength="60" />
         </div>
         <div class="filter-group" id="staff-filters">
           <button class="filter-btn active" data-filter="All">All</button>

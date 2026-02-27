@@ -133,6 +133,31 @@ body {
 }
 .dark-toggle:hover { transform: scale(1.1); background: var(--accent-light); }
 
+/* Reset Demo button */
+.reset-btn {
+  padding: 6px 14px; font-size: .8rem; font-weight: 700;
+  border: 1.5px solid var(--status-reopened); border-radius: var(--radius-sm);
+  background: transparent; color: var(--status-reopened);
+  cursor: pointer; transition: all var(--transition);
+  white-space: nowrap;
+}
+.reset-btn:hover {
+  background: var(--status-reopened); color: #fff;
+  box-shadow: var(--shadow-sm);
+}
+
+.header-right {
+  display: flex; align-items: center; gap: 8px;
+}
+
+/* Character counter */
+.char-counter {
+  font-size: .72rem; font-weight: 400; color: var(--text-muted);
+  text-transform: none; letter-spacing: 0; margin-left: 6px;
+}
+.char-counter.near-limit { color: var(--priority-medium); }
+.char-counter.at-limit   { color: var(--priority-high); font-weight: 700; }
+
 /* ============================================================
    STUDENT VIEW
    ============================================================ */
