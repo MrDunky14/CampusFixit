@@ -1,0 +1,229 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>CampusFixit — Maintenance Ticket System</title>
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <!-- Toast container -->
+  <div id="toast-container"></div>
+
+  <!-- ===== Verification Modal ===== -->
+  <div id="verify-modal" class="modal-overlay hidden">
+    <div class="modal">
+      <h3 class="modal-title">✅ Verify Completed Work</h3>
+      <p class="modal-subtitle" id="modal-ticket-info"></p>
+      <div class="modal-body">
+        <label for="verify-comment">Comment (optional)</label>
+        <textarea id="verify-comment" rows="3" placeholder="Any feedback on the repair…"></textarea>
+        <div class="modal-rating">
+          <label>Rate the fix</label>
+          <div class="stars" id="star-rating">
+            <span class="star" data-val="1">★</span>
+            <span class="star" data-val="2">★</span>
+            <span class="star" data-val="3">★</span>
+            <span class="star" data-val="4">★</span>
+            <span class="star" data-val="5">★</span>
+          </div>
+        </div>
+      </div>
+      <div class="modal-actions">
+        <button id="verify-accept" class="btn-verify-accept">✅ Confirm Fixed</button>
+        <button id="verify-reject" class="btn-verify-reject">🔄 Reopen Issue</button>
+        <button id="verify-cancel" class="btn-verify-cancel">Cancel</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ===== Staff Notes Modal ===== -->
+  <div id="notes-modal" class="modal-overlay hidden">
+    <div class="modal modal-wide">
+      <h3 class="modal-title">📝 Staff Notes & Activity Log</h3>
+      <p class="modal-subtitle" id="notes-ticket-info"></p>
+      <div class="modal-body">
+        <label for="staff-note-input">Add a note</label>
+        <div class="note-input-row">
+          <textarea id="staff-note-input" rows="2" placeholder="e.g. Ordered replacement part…"></textarea>
+          <button id="add-note-btn" class="btn-add-note">+ Add</button>
+        </div>
+        <div id="activity-log" class="activity-log"></div>
+      </div>
+      <div class="modal-actions">
+        <button id="notes-close" class="btn-verify-cancel">Close</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ===== Header ===== -->
+  <header class="header">
+    <div class="header-left">
+      <h1 class="logo">🏫 Campus<span class="accent">Fixit</span></h1>
+    </div>
+    <div class="header-center">
+      <div class="role-switcher">
+        <button class="role-btn active" data-role="student">🎓 Student</button>
+        <button class="role-btn" data-role="staff">🔧 Staff</button>
+      </div>
+    </div>
+    <div class="header-right">
+      <button id="dark-toggle" class="dark-toggle" title="Toggle Dark Mode">
+        <span id="dark-icon">🌙</span>
+      </button>
+    </div>
+  </header>
+
+  <!-- ============================================================
+       STUDENT VIEW
+       ============================================================ -->
+  <main id="student-view" class="main-layout">
+    <!-- LEFT SIDEBAR — Submission Form -->
+    <aside class="sidebar">
+      <form id="ticket-form" class="ticket-form">
+        <h2 class="form-title">📝 Report an Issue</h2>
+
+        <!-- Reporter Name -->
+        <label for="reporter">Your Name</label>
+        <input type="text" id="reporter" placeholder="e.g. Arjun Mehta" required />
+
+        <!-- Category -->
+        <label for="category">Category</label>
+        <select id="category" required>
+          <option value="" disabled selected>Select a category…</option>
+          <option value="💻 IT/Projector">💻 IT/Projector</option>
+          <option value="❄️ AC/Ventilation">❄️ AC/Ventilation</option>
+          <option value="🪑 Furniture">🪑 Furniture</option>
+          <option value="💡 Lighting">💡 Lighting</option>
+          <option value="🚿 Plumbing">🚿 Plumbing</option>
+          <option value="📶 WiFi/Network">📶 WiFi/Network</option>
+          <option value="🔌 Electrical">🔌 Electrical</option>
+          <option value="🧹 Cleaning">🧹 Cleaning</option>
+          <option value="🔧 Other">🔧 Other</option>
+        </select>
+
+        <!-- Location -->
+        <label for="location">Location</label>
+        <div class="location-wrap">
+          <input type="text" id="location" placeholder="e.g. Lab 4, Block B" required />
+          <button type="button" id="scan-qr" class="scan-qr-btn" title="Scan Room QR">
+            📷 Scan QR
+          </button>
+        </div>
+
+        <!-- Priority -->
+        <label for="priority">Priority</label>
+        <select id="priority" required>
+          <option value="" disabled selected>Select priority…</option>
+          <option value="Low">🟢 Low</option>
+          <option value="Medium">🟡 Medium</option>
+          <option value="High">🔴 High</option>
+        </select>
+
+        <!-- Description -->
+        <label for="description">Problem Description</label>
+        <textarea id="description" rows="4" placeholder="Describe the issue in detail…" required></textarea>
+
+        <!-- Submit -->
+        <button type="submit" class="btn-submit">🚀 Submit Ticket</button>
+      </form>
+    </aside>
+
+    <!-- RIGHT MAIN AREA — Student Dashboard -->
+    <section class="dashboard">
+      <div class="dash-header">
+        <h2 class="dash-title">📋 My Tickets</h2>
+        <div class="filter-group" id="student-filters">
+          <button class="filter-btn active" data-filter="All">All</button>
+          <button class="filter-btn" data-filter="Pending">Pending</button>
+          <button class="filter-btn" data-filter="Assigned">Assigned</button>
+          <button class="filter-btn" data-filter="In Progress">In Progress</button>
+          <button class="filter-btn" data-filter="Fixed">Fixed</button>
+          <button class="filter-btn" data-filter="Verified">Verified</button>
+        </div>
+      </div>
+
+      <div id="tickets-grid" class="tickets-grid">
+        <div class="empty-state" id="empty-state">
+          <p>🎉 No tickets yet — the campus is running smoothly!</p>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <!-- ============================================================
+       STAFF VIEW
+       ============================================================ -->
+  <main id="staff-view" class="staff-layout hidden">
+    <!-- Stats Bar -->
+    <div class="stats-bar">
+      <div class="stat-card stat-total">
+        <div class="stat-number" id="stat-total">0</div>
+        <div class="stat-label">Total</div>
+      </div>
+      <div class="stat-card stat-pending-card">
+        <div class="stat-number" id="stat-pending">0</div>
+        <div class="stat-label">Pending</div>
+      </div>
+      <div class="stat-card stat-progress-card">
+        <div class="stat-number" id="stat-progress">0</div>
+        <div class="stat-label">In Progress</div>
+      </div>
+      <div class="stat-card stat-fixed-card">
+        <div class="stat-number" id="stat-fixed">0</div>
+        <div class="stat-label">Awaiting Verify</div>
+      </div>
+      <div class="stat-card stat-verified-card">
+        <div class="stat-number" id="stat-verified">0</div>
+        <div class="stat-label">Verified</div>
+      </div>
+    </div>
+
+    <!-- Staff toolbar -->
+    <div class="staff-toolbar">
+      <h2 class="dash-title">🔧 Staff Ticket Queue</h2>
+      <div class="staff-toolbar-right">
+        <div class="staff-name-wrap">
+          <label for="staff-name" class="staff-name-label">👤</label>
+          <input type="text" id="staff-name" class="staff-name-input" placeholder="Your name…" />
+        </div>
+        <div class="filter-group" id="staff-filters">
+          <button class="filter-btn active" data-filter="All">All</button>
+          <button class="filter-btn" data-filter="Pending">Pending</button>
+          <button class="filter-btn" data-filter="Assigned">Assigned</button>
+          <button class="filter-btn" data-filter="In Progress">In Progress</button>
+          <button class="filter-btn" data-filter="Fixed">Fixed</button>
+          <button class="filter-btn" data-filter="Verified">Verified</button>
+          <button class="filter-btn" data-filter="Reopened">Reopened</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Staff ticket table -->
+    <div class="staff-table-wrap">
+      <table class="staff-table" id="staff-table">
+        <thead>
+          <tr>
+            <th>ID</th>
+            <th>Category</th>
+            <th>Location</th>
+            <th>Priority</th>
+            <th>Reporter</th>
+            <th>Status</th>
+            <th>Assigned To</th>
+            <th>Created</th>
+            <th>Actions</th>
+          </tr>
+        </thead>
+        <tbody id="staff-tbody">
+        </tbody>
+      </table>
+      <div class="empty-state" id="staff-empty">
+        <p>📭 No tickets match the current filter.</p>
+      </div>
+    </div>
+  </main>
+
+  <script src="app.js"></script>
+</body>
+</html>
