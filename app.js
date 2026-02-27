@@ -69,6 +69,7 @@
   let photoData = null; // base64 string
   let lastSubmitTime = 0;
   let voted = new Set();
+  let notifications = [];
   const STAFF_PIN = '1234';
   let staffAuthenticated = false;
 
@@ -129,6 +130,12 @@
 
   /* ---------- DOM Refs ---------- */
   const el = {
+    notifBell: $('#notif-bell'),
+    notifBadge: $('#notif-badge'),
+    notifPanel: $('#notif-panel'),
+    notifList: $('#notif-list'),
+    notifClear: $('#notif-clear'),
+    notifWrap: $('#notif-wrap'),
     toastContainer: $('#toast-container'),
     lightboxModal: $('#lightbox-modal'),
     lightboxImg: $('#lightbox-img'),
@@ -196,17 +203,39 @@
     if (v) { try { voted = new Set(JSON.parse(v)); } catch { voted = new Set(); } }
   }
   function saveVoted() { localStorage.setItem('campusfixit_voted', JSON.stringify([...voted])); }
+  function saveNotifs() { localStorage.setItem('campusfixit_notifs', JSON.stringify(notifications)); }
+  function loadNotifs() {
+    const raw = localStorage.getItem('campusfixit_notifs');
+    if (raw) { try { notifications = JSON.parse(raw); } catch { notifications = []; } }
+  }
 
   function resetToSeed() {
     tickets = JSON.parse(JSON.stringify(SEED_DATA));
     voted = new Set();
+    notifications = generateSeedNotifications();
     save();
     saveVoted();
+    saveNotifs();
+  }
+
+  function generateSeedNotifications() {
+    return [
+      { id: 'n1', icon: '📋', iconClass: 'ni-new', text: '<strong>#TKN7ZE</strong> — New high-priority WiFi issue reported in Library', time: Date.now() - 3600000 * 30, read: true, ticketId: 'TKN7ZE' },
+      { id: 'n2', icon: '👷', iconClass: 'ni-assign', text: '<strong>#TK3PY7</strong> assigned to Maintenance Team A', time: Date.now() - 3600000 * 18, read: true, ticketId: 'TK3PY7' },
+      { id: 'n3', icon: '🔧', iconClass: 'ni-progress', text: '<strong>#TK5NQ9</strong> repair work started by Carpenter', time: Date.now() - 3600000 * 12, read: false, ticketId: 'TK5NQ9' },
+      { id: 'n4', icon: '✅', iconClass: 'ni-fixed', text: '<strong>#TK9RW4</strong> lighting fix completed — awaiting verification', time: Date.now() - 3600000 * 6, read: false, ticketId: 'TK9RW4' },
+      { id: 'n5', icon: '⭐', iconClass: 'ni-verified', text: '<strong>#TKJC6M</strong> verified with 5-star rating by Karthik', time: Date.now() - 3600000 * 4, read: false, ticketId: 'TKJC6M' },
+    ];
   }
 
   /* ---------- Init ---------- */
   function init() {
     load();
+    loadNotifs();
+    if (!notifications.length && !localStorage.getItem('campusfixit_notifs')) {
+      notifications = generateSeedNotifications();
+      saveNotifs();
+    }
     // Theme
     const savedTheme = localStorage.getItem('campusfixit_theme');
     if (savedTheme === 'dark') document.body.classList.add('dark');
@@ -215,6 +244,7 @@
     const sn = localStorage.getItem('campusfixit_staff_name');
     if (sn) el.staffName.value = sn;
     render();
+    renderNotifications();
     bindEvents();
   }
 
@@ -225,6 +255,14 @@
 
     // Dark mode
     el.darkToggle.addEventListener('click', toggleDark);
+
+    // Notifications
+    el.notifBell.addEventListener('click', toggleNotifPanel);
+    el.notifClear.addEventListener('click', clearAllNotifs);
+    el.notifList.addEventListener('click', handleNotifClick);
+    document.addEventListener('click', (e) => {
+      if (!el.notifWrap.contains(e.target)) el.notifPanel.classList.add('hidden');
+    });
 
     // Reset
     el.resetBtn.addEventListener('click', () => {
@@ -373,6 +411,77 @@
   }
   function updateDarkIcon() { el.darkIcon.textContent = document.body.classList.contains('dark') ? '☀️' : '🌙'; }
 
+  /* ---------- Notification System ---------- */
+  function addNotification({ icon, iconClass, text, ticketId }) {
+    const notif = {
+      id: 'n' + Date.now() + Math.random().toString(36).slice(2, 5),
+      icon: icon || '📋',
+      iconClass: iconClass || 'ni-new',
+      text,
+      time: Date.now(),
+      read: false,
+      ticketId: ticketId || null,
+    };
+    notifications.unshift(notif);
+    // Keep max 50 notifications
+    if (notifications.length > 50) notifications = notifications.slice(0, 50);
+    saveNotifs();
+    renderNotifications();
+  }
+
+  function toggleNotifPanel() {
+    el.notifPanel.classList.toggle('hidden');
+  }
+
+  function clearAllNotifs() {
+    notifications = [];
+    saveNotifs();
+    renderNotifications();
+  }
+
+  function handleNotifClick(e) {
+    const item = e.target.closest('.notif-item');
+    if (!item) return;
+    const id = item.dataset.id;
+    const notif = notifications.find(n => n.id === id);
+    if (!notif) return;
+    notif.read = true;
+    saveNotifs();
+    renderNotifications();
+    // Close panel
+    el.notifPanel.classList.add('hidden');
+  }
+
+  function renderNotifications() {
+    const unreadCount = notifications.filter(n => !n.read).length;
+    // Badge
+    if (unreadCount > 0) {
+      el.notifBadge.textContent = unreadCount > 9 ? '9+' : unreadCount;
+      el.notifBadge.classList.remove('hidden');
+      el.notifBell.classList.add('has-unread');
+    } else {
+      el.notifBadge.classList.add('hidden');
+      el.notifBell.classList.remove('has-unread');
+    }
+
+    // List
+    if (!notifications.length) {
+      el.notifList.innerHTML = '<div class="notif-empty">🔔 No notifications yet</div>';
+      return;
+    }
+
+    el.notifList.innerHTML = notifications.map(n => `
+      <div class="notif-item ${n.read ? '' : 'unread'}" data-id="${escapeHTML(n.id)}">
+        <div class="notif-icon ${escapeHTML(n.iconClass)}">${n.icon}</div>
+        <div class="notif-body">
+          <div class="notif-text">${n.text}</div>
+          <div class="notif-time">${timeAgo(n.time)}</div>
+        </div>
+        ${n.read ? '' : '<div class="notif-dot"></div>'}
+      </div>
+    `).join('');
+  }
+
   /* ---------- Description Counter ---------- */
   function updateDescCounter() {
     const len = el.description.value.length;
@@ -466,6 +575,11 @@
     updateDescCounter();
 
     toast(`Ticket #${ticket.id} submitted successfully!`);
+    addNotification({
+      icon: '📋', iconClass: 'ni-new',
+      text: `<strong>#${escapeHTML(ticket.id)}</strong> — New ${escapeHTML(ticket.priority).toLowerCase()}-priority ${escapeHTML(ticket.category)} issue reported at ${escapeHTML(ticket.location)}`,
+      ticketId: ticket.id,
+    });
     render();
   }
 
@@ -531,6 +645,11 @@
         t.status = newStatus;
         t.log.push({ time: Date.now(), actor: staffName, text: `Status → ${newStatus} to ${t.assignedTo}` });
         save();
+        addNotification({
+          icon: '👷', iconClass: 'ni-assign',
+          text: `<strong>#${escapeHTML(id)}</strong> assigned to ${escapeHTML(t.assignedTo)} by ${escapeHTML(staffName)}`,
+          ticketId: id,
+        });
         toast(`Ticket #${id} → ${newStatus}`);
         render();
       });
@@ -539,6 +658,18 @@
     t.status = newStatus;
     t.log.push({ time: Date.now(), actor: staffName, text: `Status → ${newStatus}` });
     save();
+    const notifMap = {
+      'In Progress': { icon: '🔧', iconClass: 'ni-progress', label: 'repair started' },
+      'Fixed': { icon: '✅', iconClass: 'ni-fixed', label: 'marked as fixed — awaiting verification' },
+    };
+    const nm = notifMap[newStatus];
+    if (nm) {
+      addNotification({
+        icon: nm.icon, iconClass: nm.iconClass,
+        text: `<strong>#${escapeHTML(id)}</strong> ${nm.label} by ${escapeHTML(staffName)}`,
+        ticketId: id,
+      });
+    }
     toast(`Ticket #${id} → ${newStatus}`);
     render();
   }
@@ -638,11 +769,21 @@
       t.verifiedComment = el.verifyComment.value.trim() || null;
       const stars = '★'.repeat(selectedRating) + '☆'.repeat(5 - selectedRating);
       t.log.push({ time: Date.now(), actor: t.reporter, text: `Verified ${stars}${t.verifiedComment ? ' — ' + t.verifiedComment : ''}` });
+      addNotification({
+        icon: '⭐', iconClass: 'ni-verified',
+        text: `<strong>#${escapeHTML(verifyTicketId)}</strong> verified with ${selectedRating}-star rating`,
+        ticketId: verifyTicketId,
+      });
       toast(`Ticket #${verifyTicketId} verified! Thank you.`);
     } else {
       t.status = 'Reopened';
       const comment = el.verifyComment.value.trim();
       t.log.push({ time: Date.now(), actor: t.reporter, text: `Reopened${comment ? ' — ' + comment : ''}` });
+      addNotification({
+        icon: '🔄', iconClass: 'ni-reopened',
+        text: `<strong>#${escapeHTML(verifyTicketId)}</strong> reopened — issue not fully resolved`,
+        ticketId: verifyTicketId,
+      });
       toast(`Ticket #${verifyTicketId} reopened for further attention`);
     }
     save();
@@ -685,6 +826,11 @@
     t.notes.push({ actor: staffName, text, time: Date.now() });
     t.log.push({ time: Date.now(), actor: staffName, text: `Note: ${text}` });
     save();
+    addNotification({
+      icon: '📝', iconClass: 'ni-note',
+      text: `<strong>#${escapeHTML(notesTicketId)}</strong> — ${escapeHTML(staffName)} added a note`,
+      ticketId: notesTicketId,
+    });
     el.staffNoteInput.value = '';
     renderActivityLog(t);
     toast('Note added');
@@ -700,6 +846,11 @@
     t.eta = date;
     t.log.push({ time: Date.now(), actor: staffName, text: `ETA set to ${date}` });
     save();
+    addNotification({
+      icon: '📅', iconClass: 'ni-eta',
+      text: `<strong>#${escapeHTML(notesTicketId)}</strong> — estimated fix date set to ${escapeHTML(date)}`,
+      ticketId: notesTicketId,
+    });
     toast(`ETA set to ${date}`);
     renderActivityLog(t);
     render();

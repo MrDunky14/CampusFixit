@@ -107,6 +107,21 @@
       </div>
     </div>
     <div class="header-right">
+      <div class="notif-wrap" id="notif-wrap">
+        <button id="notif-bell" class="notif-bell" title="Notifications">
+          <span class="notif-bell-icon">🔔</span>
+          <span id="notif-badge" class="notif-badge hidden">0</span>
+        </button>
+        <div id="notif-panel" class="notif-panel hidden">
+          <div class="notif-header">
+            <span class="notif-title">Notifications</span>
+            <button id="notif-clear" class="notif-clear">Clear all</button>
+          </div>
+          <div id="notif-list" class="notif-list">
+            <div class="notif-empty">No notifications yet</div>
+          </div>
+        </div>
+      </div>
       <button id="reset-data-btn" class="reset-btn" title="Reset to demo data">🔄 Reset</button>
       <button id="dark-toggle" class="dark-toggle" title="Toggle Dark Mode">
         <span id="dark-icon">🌙</span>
